@@ -1,4 +1,3 @@
-import { connection } from "next/server";
 import { createCachedFetcher } from "@/lib/sources/cache";
 import {
   SRI_LANKA_DOM_URL,
@@ -12,8 +11,6 @@ const cache = createCachedFetcher(fetchSriLankaObservations, {
 });
 
 export async function GET() {
-  await connection();
-
   try {
     const result = await cache.get();
     const observationMs = Date.parse(result.data.observationTime || "");

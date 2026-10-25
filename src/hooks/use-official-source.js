@@ -18,7 +18,14 @@ async function readJsonResponse(response) {
 }
 
 export function useOfficialSource(key, url, { ttlMs = 5 * 60 * 1000, enabled = true } = {}) {
-  const [state, setState] = useState({ status: "loading", data: null, error: null });
+  // Initialize state based on enabled flag using useState initializer
+  // This runs once during component construction, not on every render
+  const initialState = {
+    status: enabled ? "loading" : "unavailable",
+    data: null,
+    error: null,
+  };
+  const [state, setState] = useState(() => initialState);
   const abortRef = useRef(null);
   const mountedRef = useRef(true);
 
@@ -32,6 +39,9 @@ export function useOfficialSource(key, url, { ttlMs = 5 * 60 * 1000, enabled = t
 
   const load = useCallback(
     async (force = false) => {
+      // When disabled, don't attempt to load
+      if (!enabled) return;
+
       const cached = sourceCache.get(key);
       if (!force && cached && Date.now() - cached.at < ttlMs) {
         setState({ status: "success", data: cached.data, error: null });
@@ -75,23 +85,27 @@ export function useOfficialSource(key, url, { ttlMs = 5 * 60 * 1000, enabled = t
         }));
       }
     },
-    [key, ttlMs, url],
+    [key, ttlMs, url, enabled],
   );
 
   useEffect(() => {
-    if (!enabled) return;
-    load(false);
-  }, [enabled, load]);
+    if (enabled) load(false);
+  }, [load, enabled]);
 
   const refresh = useCallback(() => {
-    if (enabled) load(true);
-  }, [enabled, load]);
+    load(true);
+  }, [load]);
   return { ...state, refresh };
 }
 
 export function useSriLankaObservations(options = {}) {
+  // Make the official source optionally enabled based on storage readiness
+  // and user preference. If disabled or data fails to load, the app gracefully
+  // degrades showing only the Open-Meteo forecast.
+  const { enabled = true, ...rest } = options;
   return useOfficialSource("sri-lanka-dom", "/api/weather/sri-lanka-dom", {
     ttlMs: 5 * 60 * 1000,
-    ...options,
+    enabled,
+    ...rest,
   });
 }
