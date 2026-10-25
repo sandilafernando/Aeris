@@ -3,9 +3,12 @@
 import {
   Database,
   ExternalLink,
+  LoaderCircle,
+  MapPin,
   Monitor,
   Moon,
   ShieldCheck,
+  Sparkles,
   Sun,
   Thermometer,
   Wind,
@@ -17,8 +20,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { SegmentedControl } from "@/components/segmented-control";
+import StationSelect from "@/components/station-select";
 import { usePreferences } from "@/components/preferences-provider";
+import { AUTOMATIC_STATION_ID } from "@/lib/station-selection";
 
 const THEME_OPTIONS = [
   { value: "light", label: "Light", icon: Sun },
@@ -37,19 +43,41 @@ const WIND_OPTIONS = [
   { value: "ms", label: "m/s" },
 ];
 
-export default function SettingsDialog({ open, onOpenChange }) {
+export default function SettingsDialog({
+  open,
+  onOpenChange,
+  onCloseAutoFocus,
+  onOpenSources,
+  official,
+}) {
   const {
     theme,
     temperatureUnit,
     windUnit,
+    reducedEffects,
+    stationId,
     setTheme,
     setTemperatureUnit,
     setWindUnit,
+    setReducedEffects,
+    setStationId,
   } = usePreferences();
+
+  const stations = official?.data?.stations || [];
+  const stationLoading = official?.status === "loading" && !official?.data;
+  const stationError = official?.status === "error" && !official?.data;
+  const manualMissing =
+    stationId !== AUTOMATIC_STATION_ID &&
+    stations.length > 0 &&
+    !stations.some((station) => station.id === stationId);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          onCloseAutoFocus?.();
+        }}
         className="dialog-surface flex max-h-[min(90dvh,760px)] w-[calc(100%-1rem)] max-w-[34rem] flex-col gap-0 overflow-hidden rounded-[1.75rem] border-border bg-popover p-0 sm:w-[calc(100%-2rem)] sm:rounded-[2rem]"
       >
         <DialogHeader className="shrink-0 px-5 pb-4 pt-6 sm:px-7 sm:pt-7">
@@ -124,6 +152,109 @@ export default function SettingsDialog({ open, onOpenChange }) {
             </div>
           </section>
 
+          <section aria-labelledby="station-heading">
+            <h2
+              id="station-heading"
+              className="mb-2.5 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground"
+            >
+              Official station
+            </h2>
+            <div className="space-y-3 rounded-2xl border border-outline-variant bg-surface-container/55 p-3.5">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <MapPin aria-hidden="true" className="size-4 text-muted-foreground" />
+                <label htmlFor="settings-station-select">Sri Lanka DoM station</label>
+              </div>
+              <StationSelect
+                id="settings-station-select"
+                value={stationId}
+                stations={stations}
+                onChange={setStationId}
+                disabled={!stations.length}
+                describedBy="settings-station-help"
+              />
+              <p
+                id="settings-station-help"
+                className="text-[0.7rem] leading-5 text-muted-foreground"
+              >
+                Automatic chooses from the selected place and prefers a fresh observation over
+                a stale nearer station. A manual choice is saved on this device and stays
+                selected across refreshes and app restarts.
+              </p>
+
+              {stationLoading ? (
+                <p
+                  role="status"
+                  aria-live="polite"
+                  className="flex items-center gap-2 text-[0.7rem] text-muted-foreground"
+                >
+                  <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+                  Loading the official station list…
+                </p>
+              ) : null}
+
+              {stationError ? (
+                <div className="rounded-xl bg-card/70 px-3 py-2.5 text-[0.7rem] leading-5">
+                  <p className="font-semibold">Station list unavailable</p>
+                  <p className="mt-0.5 text-muted-foreground">{official?.error}</p>
+                  <button
+                    type="button"
+                    onClick={official?.refresh}
+                    className="mt-1.5 min-h-9 rounded-full px-2.5 text-[0.68rem] font-semibold text-primary hover:bg-primary-container"
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : null}
+
+              {manualMissing ? (
+                <div className="rounded-xl bg-tertiary-container/65 px-3 py-2.5 text-[0.7rem] leading-5 text-on-tertiary-container">
+                  <p className="font-semibold">Saved station unavailable</p>
+                  <p className="mt-0.5 opacity-90">
+                    That station is not in the current official response. Your manual choice
+                    has not been changed; choose another station above or Automatic.
+                  </p>
+                </div>
+              ) : null}
+
+              <p className="text-[0.66rem] leading-4 text-muted-foreground">
+                Automatic selection uses approximate city-centre reference points, not official
+                station coordinates, because the DoM page does not publish them.
+              </p>
+            </div>
+          </section>
+
+          <section aria-labelledby="effects-heading">
+            <h2
+              id="effects-heading"
+              className="mb-2.5 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground"
+            >
+              Motion &amp; effects
+            </h2>
+            <div className="space-y-3 rounded-2xl border border-outline-variant bg-surface-container/55 p-3.5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <label
+                    htmlFor="reduce-effects"
+                    className="flex items-center gap-2 text-sm font-semibold"
+                  >
+                    <Sparkles aria-hidden="true" className="size-4 text-muted-foreground" />
+                    Reduce motion and effects
+                  </label>
+                  <p className="mt-1 text-[0.7rem] leading-5 text-muted-foreground">
+                    Stops the weather-scene drift, rain, snow, and scroll reveals. System
+                    reduced-motion settings are always respected.
+                  </p>
+                </div>
+                <Switch
+                  id="reduce-effects"
+                  checked={reducedEffects}
+                  onCheckedChange={setReducedEffects}
+                  className="mt-0.5"
+                />
+              </div>
+            </div>
+          </section>
+
           <section aria-labelledby="privacy-heading">
             <h2
               id="privacy-heading"
@@ -136,7 +267,8 @@ export default function SettingsDialog({ open, onOpenChange }) {
                 <ShieldCheck aria-hidden="true" className="mt-1 size-4 shrink-0 text-primary" />
                 <span>
                   Themes, units, and up to 20 saved places live in this browser&apos;s local
-                  storage. Your current coordinates are used for one forecast and never saved.
+                  storage. Current coordinates stay in session storage for this tab only —
+                  never in the saved list — and are cleared when the tab closes.
                 </span>
               </p>
               <p className="flex gap-2.5">
@@ -154,6 +286,24 @@ export default function SettingsDialog({ open, onOpenChange }) {
                   , including geocoding data from GeoNames. No account or API key is required.
                 </span>
               </p>
+              <p className="flex gap-2.5">
+                <Database aria-hidden="true" className="mt-1 size-4 shrink-0 text-primary" />
+                <span>
+                  Official 3-hourly station observations come from the Department of
+                  Meteorology, Sri Lanka, fetched through Aeris&apos;s own route handler. They
+                  are shown separately from the Open-Meteo forecast.
+                </span>
+              </p>
+              {onOpenSources ? (
+                <button
+                  type="button"
+                  onClick={onOpenSources}
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-outline-variant px-3 text-xs font-semibold text-foreground hover:border-primary/40 hover:bg-primary-container/45"
+                >
+                  <Database aria-hidden="true" className="size-3.5" />
+                  Data sources &amp; limits
+                </button>
+              ) : null}
             </div>
           </section>
 

@@ -1,15 +1,28 @@
 export const PREFERENCES_KEY = "aeris:preferences:v1";
 export const PLACES_KEY = "aeris:places:v1";
+export const SESSION_LOCATION_KEY = "aeris:session-location:v1";
 
 export const DEFAULT_PREFERENCES = Object.freeze({
   theme: "system",
   temperatureUnit: "c",
   windUnit: "kmh",
+  reducedEffects: false,
+  stationId: "auto",
 });
 
 const THEMES = new Set(["light", "dark", "system"]);
 const TEMPERATURE_UNITS = new Set(["c", "f"]);
 const WIND_UNITS = new Set(["kmh", "mph", "ms"]);
+const STATION_ID_PATTERN = /^(auto|[a-z0-9]+(?:-[a-z0-9]+)*)$/;
+
+export function normalizeStationPreference(value) {
+  if (typeof value !== "string") return DEFAULT_PREFERENCES.stationId;
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed.length > 80 || !STATION_ID_PATTERN.test(trimmed)) {
+    return DEFAULT_PREFERENCES.stationId;
+  }
+  return trimmed;
+}
 
 export function roundCoordinate(value) {
   return Math.round(Number(value) * 1000) / 1000;
@@ -36,6 +49,11 @@ export function normalizePreferences(value) {
     windUnit: WIND_UNITS.has(value.windUnit)
       ? value.windUnit
       : DEFAULT_PREFERENCES.windUnit,
+    reducedEffects:
+      typeof value.reducedEffects === "boolean"
+        ? value.reducedEffects
+        : DEFAULT_PREFERENCES.reducedEffects,
+    stationId: normalizeStationPreference(value.stationId),
   };
 }
 
@@ -148,4 +166,51 @@ export function placeKey(place) {
 export function placeLabel(place) {
   if (!place) return "";
   return [place.name, place.admin1, place.country].filter(Boolean).join(", ");
+}
+
+/*
+ * Current-location data stays out of the saved-places list. A tab-scoped
+ * sessionStorage record lets a reload keep using the same place without
+ * turning it into a saved city. Closing the tab clears it.
+ */
+export function readSessionLocation() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(SESSION_LOCATION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const place = normalizePlace(parsed?.place);
+    if (!place) return null;
+    return { place, active: parsed?.active === true };
+  } catch {
+    return null;
+  }
+}
+
+export function saveSessionLocation(place, active = false) {
+  if (typeof window === "undefined") return false;
+  try {
+    const normalized = normalizePlace(place);
+    if (!normalized) {
+      window.sessionStorage.removeItem(SESSION_LOCATION_KEY);
+      return true;
+    }
+    window.sessionStorage.setItem(
+      SESSION_LOCATION_KEY,
+      JSON.stringify({ place: normalized, active: Boolean(active) }),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function clearSessionLocation() {
+  if (typeof window === "undefined") return false;
+  try {
+    window.sessionStorage.removeItem(SESSION_LOCATION_KEY);
+    return true;
+  } catch {
+    return false;
+  }
 }

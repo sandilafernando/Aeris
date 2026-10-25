@@ -9,14 +9,18 @@ import CurrentWeatherHero from "@/components/current-weather-hero";
 import DailyForecast from "@/components/daily-forecast";
 import HourlyForecast from "@/components/hourly-forecast";
 import LocationDialog from "@/components/location-dialog";
+import OfficialObservations from "@/components/official-observations";
 import Onboarding from "@/components/onboarding";
 import SettingsDialog from "@/components/settings-dialog";
 import SiteFooter from "@/components/site-footer";
+import SourcesDialog from "@/components/sources-dialog";
 import SunCard from "@/components/sun-card";
+import WeatherDesk from "@/components/weather-desk";
 import WeatherError from "@/components/weather-error";
 import WeatherSkeleton from "@/components/weather-skeleton";
 import { usePreferences } from "@/components/preferences-provider";
 import { useNow, useOnlineStatus } from "@/hooks/use-environment";
+import { useSriLankaObservations } from "@/hooks/use-official-source";
 import { useWeather } from "@/hooks/use-weather";
 import { formatTime, relativeUpdateLabel } from "@/lib/format";
 import {
@@ -24,7 +28,9 @@ import {
   placeKey,
   placeLabel,
   readSavedPlaces,
+  readSessionLocation,
   savePlacesState,
+  saveSessionLocation,
 } from "@/lib/storage";
 import { paletteCssVariables, resolvePalette } from "@/lib/palettes";
 
@@ -37,24 +43,32 @@ function findSavedMatch(saved, place) {
 }
 
 export default function WeatherApp() {
-  const { resolvedTheme } = usePreferences();
-  const reduceMotion = useReducedMotion();
+  const { resolvedTheme, reducedEffects, stationId, setStationId } = usePreferences();
+  const systemReduceMotion = useReducedMotion();
+  const reduceMotion = systemReduceMotion || reducedEffects;
   const clock = useNow(30_000);
   const online = useOnlineStatus();
 
   const [savedLocations, setSavedLocations] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [sessionLocation, setSessionLocation] = useState(null);
+  const [sessionActive, setSessionActive] = useState(false);
   const [storageReady, setStorageReady] = useState(false);
   const [locationsOpen, setLocationsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
   const [locationsNotice, setLocationsNotice] = useState("");
+  const dialogTriggerRef = useRef(null);
 
   /* eslint-disable react-hooks/set-state-in-effect -- localStorage is read after hydration so the server and client markup match. */
   useEffect(() => {
     const stored = readSavedPlaces();
+    const session = readSessionLocation();
+    const restoreSession = Boolean(session?.active && session?.place);
     setSavedLocations(stored.saved);
-    setActiveId(stored.activeId);
+    setSessionLocation(session?.place || null);
+    setSessionActive(restoreSession);
+    setActiveId(restoreSession ? session.place.id : stored.activeId);
     setStorageReady(true);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -64,18 +78,30 @@ export default function WeatherApp() {
     savePlacesState(savedLocations, activeId);
   }, [savedLocations, activeId, storageReady]);
 
+  useEffect(() => {
+    if (!storageReady) return;
+    saveSessionLocation(sessionLocation, sessionActive);
+  }, [sessionLocation, sessionActive, storageReady]);
+
   const activeLocation = useMemo(() => {
-    if (sessionLocation && activeId === sessionLocation.id) return sessionLocation;
-    return (
+    if (sessionActive && sessionLocation) return sessionLocation;
+    const savedActive =
       savedLocations.find((place) => place.id === activeId) ||
       savedLocations[0] ||
-      null
-    );
-  }, [activeId, savedLocations, sessionLocation]);
+      null;
+    return savedActive || sessionLocation || null;
+  }, [activeId, savedLocations, sessionActive, sessionLocation]);
 
   const weather = useWeather(activeLocation);
+  const official = useSriLankaObservations({
+    enabled: storageReady && (Boolean(activeLocation) || settingsOpen),
+  });
   const refreshWeather = weather.refresh;
-  const now = clock || weather.data?.fetchedAt || 0;
+  const now =
+    clock ||
+    weather.data?.fetchedAt ||
+    Date.parse(official.data?.servedAt || official.data?.fetchedAt || "") ||
+    0;
   const paletteGroup = weather.data?.current?.condition?.group || "partly";
   const paletteDay = weather.data?.current?.isDay ?? true;
 
@@ -104,6 +130,19 @@ export default function WeatherApp() {
     return () => window.clearInterval(timer);
   }, [activeLocation, online, refreshWeather]);
 
+  useEffect(() => {
+    if (!activeLocation || !online) return undefined;
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      const fetchedAt = weather.data?.fetchedAt;
+      if (!fetchedAt || Date.now() - fetchedAt >= 15 * 60 * 1000) {
+        refreshWeather();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [activeLocation, online, refreshWeather, weather.data?.fetchedAt]);
+
   const wasOnline = useRef(true);
   useEffect(() => {
     if (online && !wasOnline.current && activeLocation) {
@@ -120,6 +159,7 @@ export default function WeatherApp() {
       const existing = findSavedMatch(savedLocations, place);
       if (existing) {
         setActiveId(existing.id);
+        setSessionActive(false);
         setLocationsNotice("");
         setLocationsOpen(false);
         return;
@@ -134,6 +174,7 @@ export default function WeatherApp() {
 
       setSavedLocations((current) => [...current, place]);
       setActiveId(place.id);
+      setSessionActive(false);
       setLocationsNotice("");
       setLocationsOpen(false);
     },
@@ -144,6 +185,7 @@ export default function WeatherApp() {
     const place = normalizePlace(input);
     if (!place) return;
     setSessionLocation(place);
+    setSessionActive(true);
     setActiveId(place.id);
     setLocationsNotice("");
     setLocationsOpen(false);
@@ -155,14 +197,17 @@ export default function WeatherApp() {
       setSavedLocations(next);
       setLocationsNotice("");
       if (activeId === id) {
-        const fallback = next[0] || (sessionLocation?.id === activeId ? null : sessionLocation);
+        const fallback = next[0] || sessionLocation;
         setActiveId(fallback?.id || null);
+        setSessionActive(!next[0] && Boolean(sessionLocation));
       }
     },
     [activeId, savedLocations, sessionLocation],
   );
 
-  const openLocations = useCallback(() => {
+  const openLocations = useCallback((event) => {
+    dialogTriggerRef.current =
+      event?.currentTarget || (typeof document !== "undefined" ? document.activeElement : null);
     setLocationsNotice("");
     setLocationsOpen(true);
   }, []);
@@ -171,6 +216,30 @@ export default function WeatherApp() {
     setLocationsOpen(open);
     if (!open) setLocationsNotice("");
   }, []);
+
+  const openSettings = useCallback((event) => {
+    dialogTriggerRef.current =
+      event?.currentTarget || (typeof document !== "undefined" ? document.activeElement : null);
+    setSettingsOpen(true);
+  }, []);
+
+  const openSources = useCallback((event) => {
+    dialogTriggerRef.current =
+      event?.currentTarget || (typeof document !== "undefined" ? document.activeElement : null);
+    setSourcesOpen(true);
+  }, []);
+
+  const restoreDialogFocus = useCallback(() => {
+    const trigger = dialogTriggerRef.current;
+    if (trigger?.isConnected) trigger.focus();
+  }, []);
+
+  const openSourcesFromSettings = useCallback(() => {
+    setSettingsOpen(false);
+    window.setTimeout(() => openSources(), 220);
+    // `openSources` records the restored settings trigger as the opener, so
+    // closing the sources dialog returns focus to a connected control.
+  }, [openSources]);
 
   const hasData = Boolean(weather.data);
   const showLoading = storageReady && activeLocation && !hasData && weather.status !== "error";
@@ -193,11 +262,12 @@ export default function WeatherApp() {
         online={online}
         onOpenLocations={openLocations}
         onRefresh={weather.refresh}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={openSettings}
       />
 
       <main
         id="main-content"
+        tabIndex={-1}
         aria-busy={showLoading || weather.refreshing || !storageReady}
         className="mx-auto w-full max-w-[1320px] flex-1 px-4 pb-4 pt-4 sm:px-5 sm:pt-5 md:px-8 md:pt-7"
       >
@@ -286,16 +356,29 @@ export default function WeatherApp() {
               />
             </div>
 
-            <div className="flex min-w-0 flex-col gap-3 md:gap-4 lg:col-span-5 xl:col-span-4">
+            <div className="min-w-0 lg:col-span-5 xl:col-span-4">
+              <OfficialObservations
+                activeLocation={activeLocation}
+                official={official}
+                now={now}
+                stationId={stationId}
+                onStationChange={setStationId}
+              />
+            </div>
+
+            <div className="min-w-0 scroll-reveal lg:col-span-6">
               <SunCard
                 current={weather.data.current}
                 timezone={weather.data.timezone}
                 now={now}
               />
+            </div>
+
+            <div className="min-w-0 scroll-reveal lg:col-span-6">
               <Atmosphere current={weather.data.current} />
             </div>
 
-            <div className="min-w-0 lg:col-span-12">
+            <div className="min-w-0 scroll-reveal lg:col-span-12">
               <HourlyForecast
                 hourly={weather.data.hourly}
                 timezone={weather.data.timezone}
@@ -303,18 +386,32 @@ export default function WeatherApp() {
               />
             </div>
 
-            <div className="min-w-0 lg:col-span-12">
+            <div className="min-w-0 scroll-reveal lg:col-span-12">
               <DailyForecast
                 daily={weather.data.daily}
                 timezone={weather.data.timezone}
                 locationName={activeLocation.name}
               />
             </div>
+
+            <div className="min-w-0 scroll-reveal lg:col-span-12">
+              <WeatherDesk
+                data={weather.data}
+                location={activeLocation}
+                savedLocations={savedLocations}
+                now={now}
+                onSelectPlace={handleSelectPlace}
+              />
+            </div>
           </motion.div>
         )}
-
-        <SiteFooter />
       </main>
+
+      {/* The footer sits outside <main> so it keeps its implicit
+          contentinfo landmark instead of being scoped to the main region. */}
+      <div className="mx-auto w-full max-w-[1320px] px-4 sm:px-5 md:px-8">
+        <SiteFooter onOpenSources={openSources} />
+      </div>
 
       <LocationDialog
         open={locationsOpen}
@@ -326,8 +423,20 @@ export default function WeatherApp() {
         onSelectPlace={handleSelectPlace}
         onSelectCurrentPlace={handleSelectCurrentPlace}
         onRemovePlace={handleRemovePlace}
+        onCloseAutoFocus={restoreDialogFocus}
       />
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        onCloseAutoFocus={restoreDialogFocus}
+        onOpenSources={openSourcesFromSettings}
+        official={official}
+      />
+      <SourcesDialog
+        open={sourcesOpen}
+        onOpenChange={setSourcesOpen}
+        onCloseAutoFocus={restoreDialogFocus}
+      />
     </div>
   );
 }

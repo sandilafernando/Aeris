@@ -1,0 +1,406 @@
+/*
+ * Isolated weather atmosphere. The root sits behind hero content as long as
+ * the parent creates a stacking context (the app's `.hero-surface` does via
+ * `isolation: isolate`).
+ */
+.root {
+  --scene-strength: 1;
+  --scene-primary: var(--art-primary, var(--hero-art-primary, #e8a82c));
+  --scene-cloud: var(--hero-cloud, var(--hero-art-cloud, #f8fcfd));
+  --scene-detail: var(--hero-art-detail, #547786);
+  --scene-glow: var(--hero-glow, rgba(112, 174, 202, 0.35));
+
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: var(--scene-strength);
+}
+
+.subtle {
+  --scene-strength: 0.55;
+}
+
+.atmosphere {
+  position: absolute;
+  inset: 0;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 76%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 76%, transparent 100%);
+}
+
+/* Soft liquid-glass orbs ------------------------------------------------- */
+
+.orb {
+  position: absolute;
+  width: var(--orb-size);
+  aspect-ratio: 1;
+  top: var(--orb-top, auto);
+  right: var(--orb-right, auto);
+  bottom: var(--orb-bottom, auto);
+  left: var(--orb-left, auto);
+  border-radius: 50%;
+  filter: blur(clamp(10px, 2.2vw, 26px));
+  opacity: 0.42;
+  animation: orbDrift var(--orb-duration, 28s) ease-in-out infinite;
+  animation-delay: var(--orb-delay, 0s);
+}
+
+.tonePrimary {
+  background: radial-gradient(
+    circle at 38% 32%,
+    color-mix(in oklab, var(--scene-primary) 58%, transparent),
+    color-mix(in oklab, var(--scene-primary) 14%, transparent) 52%,
+    transparent 74%
+  );
+}
+
+.toneDetail {
+  background: radial-gradient(
+    circle at 56% 42%,
+    color-mix(in oklab, var(--scene-detail) 46%, transparent),
+    color-mix(in oklab, var(--scene-detail) 12%, transparent) 54%,
+    transparent 76%
+  );
+}
+
+.toneCloud {
+  background: radial-gradient(
+    circle at 42% 36%,
+    color-mix(in oklab, var(--scene-cloud) 34%, transparent),
+    color-mix(in oklab, var(--scene-cloud) 10%, transparent) 56%,
+    transparent 78%
+  );
+}
+
+.toneGlow {
+  background: radial-gradient(circle at 50% 50%, var(--scene-glow), transparent 72%);
+}
+
+/* Drifting clouds -------------------------------------------------------- */
+
+.cloud {
+  position: absolute;
+  width: var(--cloud-width);
+  height: calc(var(--cloud-width) * 0.32);
+  top: var(--cloud-top);
+  left: var(--cloud-left, auto);
+  right: var(--cloud-right, auto);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--scene-cloud) 24%, transparent);
+  filter: blur(10px);
+  opacity: var(--cloud-opacity, 0.38);
+  animation: cloudDrift var(--cloud-duration, 38s) ease-in-out infinite alternate;
+  animation-delay: var(--cloud-delay, 0s);
+}
+
+.cloud::before,
+.cloud::after {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+  background: inherit;
+}
+
+.cloud::before {
+  width: 42%;
+  aspect-ratio: 1;
+  top: -62%;
+  left: 12%;
+}
+
+.cloud::after {
+  width: 34%;
+  aspect-ratio: 1;
+  top: -38%;
+  right: 14%;
+}
+
+.fogBand {
+  position: absolute;
+  left: -14%;
+  width: 128%;
+  height: 13%;
+  top: var(--band-top);
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--scene-cloud) 34%, transparent) 28%,
+    color-mix(in oklab, var(--scene-cloud) 20%, transparent) 62%,
+    transparent
+  );
+  filter: blur(14px);
+  opacity: var(--band-opacity, 0.3);
+  animation: fogDrift var(--band-duration, 42s) ease-in-out infinite alternate;
+  animation-delay: var(--band-delay, 0s);
+}
+
+/* Rain and snow ---------------------------------------------------------- */
+
+.rainLayer,
+.snowLayer,
+.starField {
+  position: absolute;
+  inset: 0;
+}
+
+.rainDrop {
+  --rain-color: color-mix(in oklab, var(--scene-detail) 64%, var(--scene-cloud));
+
+  position: absolute;
+  top: 0;
+  left: var(--drop-left);
+  width: 1.5px;
+  height: 100%;
+  opacity: 0;
+  animation: rainFall var(--drop-duration, 2.1s) linear infinite;
+  animation-delay: var(--drop-delay, 0s);
+  transform: translate3d(0, -12%, 0);
+}
+
+.rainDrop::after {
+  content: "";
+  display: block;
+  width: 100%;
+  height: var(--drop-height);
+  border-radius: 999px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--rain-color) 32%,
+    color-mix(in oklab, var(--scene-cloud) 82%, transparent)
+  );
+}
+
+.rainHeavy .rainDrop {
+  --rain-color: color-mix(in oklab, var(--scene-cloud) 68%, var(--scene-detail));
+
+  width: 2px;
+}
+
+.snowflake {
+  position: absolute;
+  top: 0;
+  left: var(--flake-left);
+  width: var(--flake-size);
+  height: 100%;
+  opacity: 0;
+  animation: snowFall var(--flake-duration, 12s) linear infinite;
+  animation-delay: var(--flake-delay, 0s);
+  transform: translate3d(0, -8%, 0);
+}
+
+.snowflake::after {
+  content: "";
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--scene-cloud) 64%, var(--scene-detail));
+  box-shadow: 0 0 6px color-mix(in oklab, var(--scene-cloud) 45%, transparent);
+}
+
+/* Clear-sky rays and stars ---------------------------------------------- */
+
+.rays {
+  position: absolute;
+  top: -36%;
+  right: -18%;
+  width: min(82%, 36rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+    from 8deg,
+    color-mix(in oklab, var(--scene-primary) 34%, transparent) 0deg 2.2deg,
+    transparent 2.2deg 17deg
+  );
+  -webkit-mask-image: radial-gradient(
+    circle,
+    transparent 10%,
+    #000 34%,
+    #000 56%,
+    transparent 74%
+  );
+  mask-image: radial-gradient(circle, transparent 10%, #000 34%, #000 56%, transparent 74%);
+  opacity: 0.3;
+  animation: raysTurn 110s linear infinite;
+}
+
+.star {
+  position: absolute;
+  top: var(--star-top);
+  left: var(--star-left);
+  width: var(--star-size);
+  height: var(--star-size);
+  border-radius: 50%;
+  background: var(--scene-cloud);
+  box-shadow: 0 0 6px color-mix(in oklab, var(--scene-cloud) 50%, transparent);
+  opacity: 0.52;
+  animation: starTwinkle var(--star-duration, 6s) ease-in-out infinite;
+  animation-delay: var(--star-delay, 0s);
+}
+
+/* Motion ---------------------------------------------------------------- */
+
+@keyframes orbDrift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(var(--orb-shift-x, 1.4rem), var(--orb-shift-y, -0.9rem), 0) scale(1.05);
+  }
+}
+
+@keyframes cloudDrift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(var(--cloud-drift, 2.5rem), -0.4rem, 0);
+  }
+}
+
+@keyframes fogDrift {
+  from {
+    transform: translate3d(-2.5rem, 0, 0);
+  }
+  to {
+    transform: translate3d(2.5rem, 0, 0);
+  }
+}
+
+@keyframes rainFall {
+  0% {
+    transform: translate3d(0, -12%, 0);
+    opacity: 0;
+  }
+  10%,
+  80% {
+    opacity: var(--drop-opacity, 0.4);
+  }
+  100% {
+    transform: translate3d(-12px, 112%, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes snowFall {
+  0% {
+    transform: translate3d(0, -8%, 0);
+    opacity: 0;
+  }
+  10%,
+  88% {
+    opacity: var(--flake-opacity, 0.55);
+  }
+  50% {
+    transform: translate3d(var(--flake-sway, 12px), 50%, 0);
+  }
+  100% {
+    transform: translate3d(calc(var(--flake-sway, 12px) * -0.6), 106%, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes starTwinkle {
+  0%,
+  100% {
+    opacity: 0.24;
+    transform: scale(0.82);
+  }
+  50% {
+    opacity: 0.82;
+    transform: scale(1);
+  }
+}
+
+@keyframes raysTurn {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* Reduced motion: freeze the atmosphere and hide falling particles. ------ */
+
+@media (prefers-reduced-motion: reduce) {
+  .orb,
+  .cloud,
+  .fogBand,
+  .rainDrop,
+  .snowflake,
+  .star,
+  .rays {
+    animation: none !important;
+  }
+
+  .rainLayer,
+  .snowLayer {
+    display: none;
+  }
+
+  .rays {
+    opacity: 0.18;
+  }
+}
+
+/* `data-effects` is set on <html> by the theme bootstrap and the preferences
+ * provider. Attribute selectors are not hashed by CSS Modules, so they can be
+ * written directly; Turbopack does not accept :global() in native CSS modules. */
+.reduced .orb,
+.reduced .cloud,
+.reduced .fogBand,
+.reduced .rainDrop,
+.reduced .snowflake,
+.reduced .star,
+.reduced .rays,
+[data-effects="reduced"] .orb,
+[data-effects="reduced"] .cloud,
+[data-effects="reduced"] .fogBand,
+[data-effects="reduced"] .rainDrop,
+[data-effects="reduced"] .snowflake,
+[data-effects="reduced"] .star,
+[data-effects="reduced"] .rays {
+  animation: none !important;
+}
+
+.reduced .rainLayer,
+.reduced .snowLayer,
+[data-effects="reduced"] .rainLayer,
+[data-effects="reduced"] .snowLayer {
+  display: none;
+}
+
+.reduced .rays,
+[data-effects="reduced"] .rays {
+  opacity: 0.18;
+}
+
+/* Fewer particles on narrow screens. ------------------------------------ */
+
+@media (max-width: 639px) {
+  .rainDrop:nth-child(n + 9),
+  .snowflake:nth-child(n + 7),
+  .star:nth-child(n + 13) {
+    display: none;
+  }
+
+  .orb {
+    filter: blur(12px);
+  }
+
+  .rays {
+    width: min(96%, 30rem);
+    opacity: 0.24;
+  }
+}
+
+@media (max-width: 420px) {
+  .rainDrop:nth-child(n + 7),
+  .snowflake:nth-child(n + 5),
+  .star:nth-child(n + 9) {
+    display: none;
+  }
+}

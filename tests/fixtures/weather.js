@@ -34,7 +34,31 @@ export const TAIPEI = {
   population: 7871900,
 };
 
-const SEARCH_PLACES = [BERLIN, LISBON, TAIPEI];
+export const COLOMBO = {
+  id: 1248991,
+  name: "Colombo",
+  latitude: 6.9271,
+  longitude: 79.8612,
+  country_code: "LK",
+  country: "Sri Lanka",
+  admin1: "Western Province",
+  timezone: "Asia/Colombo",
+  population: 648034,
+};
+
+export const KANDY = {
+  id: 1241622,
+  name: "Kandy",
+  latitude: 7.2906,
+  longitude: 80.6337,
+  country_code: "LK",
+  country: "Sri Lanka",
+  admin1: "Central Province",
+  timezone: "Asia/Colombo",
+  population: 111701,
+};
+
+const SEARCH_PLACES = [BERLIN, LISBON, TAIPEI, COLOMBO, KANDY];
 
 export function searchResultsFor(query) {
   const normalized = String(query || "").toLowerCase();

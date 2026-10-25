@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Aeris — You're offline</title>
+    <meta
+      name="description"
+      content="Aeris cannot reach the network right now. Saved places and a cached forecast may still be available."
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f6f6f0" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f1210" media="(prefers-color-scheme: dark)" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/icons/icon-192.png" type="image/png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --page: #f6f6f0;
+        --ink: #1a1f1c;
+        --muted: #56605a;
+        --card: #fcfcf8;
+        --line: #d3d8cf;
+        --soft: #eef0e9;
+        --primary: #235a70;
+        --primary-hover: #1b4a5e;
+        --on-primary: #ffffff;
+        --icon-bg: #dcebf1;
+        --glow: rgba(112, 174, 202, 0.32);
+        --focus: #765a00;
+        --shadow: 0 30px 80px -46px rgba(23, 37, 31, 0.42);
+        --font-body: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        --font-display: "Bricolage Grotesque", "Figtree", ui-sans-serif, system-ui,
+          -apple-system, "Segoe UI", sans-serif;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --page: #0f1210;
+          --ink: #e7eae5;
+          --muted: #a4aea7;
+          --card: #171b18;
+          --line: #38413b;
+          --soft: #1b211d;
+          --primary: #9fd4e8;
+          --primary-hover: #bfe6f3;
+          --on-primary: #0e2c36;
+          --icon-bg: #1c4858;
+          --glow: rgba(101, 177, 202, 0.2);
+          --focus: #ffe08a;
+          --shadow: 0 34px 90px -44px rgba(0, 0, 0, 0.8);
+        }
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html {
+        -webkit-text-size-adjust: 100%;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        min-height: 100svh;
+        display: grid;
+        place-items: center;
+        padding: max(1.25rem, env(safe-area-inset-top, 0px))
+          max(1.25rem, env(safe-area-inset-right, 0px))
+          max(1.25rem, env(safe-area-inset-bottom, 0px))
+          max(1.25rem, env(safe-area-inset-left, 0px));
+        background-color: var(--page);
+        background-image: radial-gradient(46rem 28rem at 82% -12%, var(--glow), transparent 64%);
+        color: var(--ink);
+        font-family: var(--font-body);
+        font-size: 1rem;
+        line-height: 1.5;
+        text-rendering: optimizeLegibility;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .page {
+        width: 100%;
+        max-width: 39rem;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.7rem;
+        padding: 0 0.25rem 1.15rem;
+      }
+
+      .brand-mark {
+        display: grid;
+        place-items: center;
+        width: 2.7rem;
+        height: 2.7rem;
+        overflow: hidden;
+        border-radius: 0.9rem;
+        box-shadow: 0 8px 22px -14px rgba(10, 30, 38, 0.8);
+      }
+
+      .brand-mark svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
+      .brand-name {
+        font-family: var(--font-display);
+        font-size: 1.4rem;
+        font-weight: 600;
+        letter-spacing: -0.045em;
+        line-height: 1;
+      }
+
+      .card {
+        position: relative;
+        overflow: hidden;
+        padding: clamp(1.5rem, 5.5vw, 2.8rem);
+        border: 1px solid var(--line);
+        border-radius: 1.8rem;
+        background: var(--card);
+        box-shadow: var(--shadow);
+      }
+
+      .card::before {
+        content: "";
+        position: absolute;
+        top: -9rem;
+        right: -7rem;
+        width: 19rem;
+        height: 19rem;
+        border-radius: 999px;
+        background: var(--glow);
+        filter: blur(2px);
+        pointer-events: none;
+      }
+
+      .content {
+        position: relative;
+        max-width: 34rem;
+      }
+
+      .status-icon {
+        display: grid;
+        place-items: center;
+        width: 3.4rem;
+        height: 3.4rem;
+        border-radius: 999px;
+        background: var(--icon-bg);
+        color: var(--primary);
+      }
+
+      .status-icon svg {
+        width: 1.55rem;
+        height: 1.55rem;
+      }
+
+      .eyebrow {
+        margin: 1.15rem 0 0;
+        color: var(--muted);
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.17em;
+        line-height: 1.2;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0.45rem 0 0;
+        font-family: var(--font-display);
+        font-size: clamp(2.15rem, 8vw, 3.15rem);
+        font-weight: 600;
+        letter-spacing: -0.055em;
+        line-height: 0.98;
+        text-wrap: balance;
+      }
+
+      .lede {
+        max-width: 46ch;
+        margin: 1rem 0 0;
+        color: var(--muted);
+        font-size: 1rem;
+        line-height: 1.65;
+        text-wrap: pretty;
+      }
+
+      .note {
+        display: flex;
+        gap: 0.7rem;
+        align-items: flex-start;
+        margin-top: 1.35rem;
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--line);
+        border-radius: 1rem;
+        background: var(--soft);
+        font-size: 0.875rem;
+        line-height: 1.55;
+      }
+
+      .note svg {
+        flex: 0 0 auto;
+        width: 1.05rem;
+        height: 1.05rem;
+        margin-top: 0.15rem;
+        color: var(--muted);
+      }
+
+      .note p {
+        margin: 0;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: center;
+        margin-top: 1.6rem;
+      }
+
+      .button {
+        display: inline-flex;
+        min-height: 3rem;
+        align-items: center;
+        justify-content: center;
+        gap: 0.55rem;
+        padding: 0.65rem 1.4rem;
+        border-radius: 999px;
+        background: var(--primary);
+        color: var(--on-primary);
+        font-size: 0.92rem;
+        font-weight: 700;
+        line-height: 1.2;
+        text-decoration: none;
+        transition: background-color 160ms ease, transform 160ms ease;
+      }
+
+      .button svg {
+        width: 1rem;
+        height: 1rem;
+      }
+
+      .button:hover {
+        background: var(--primary-hover);
+      }
+
+      .button:active {
+        transform: translateY(1px);
+      }
+
+      .button:focus-visible,
+      a:focus-visible {
+        outline: 3px solid var(--focus);
+        outline-offset: 3px;
+      }
+
+      .fine {
+        margin: 1rem 0 0;
+        color: var(--muted);
+        font-size: 0.75rem;
+        line-height: 1.55;
+      }
+
+      .footer {
+        margin: 1.15rem 0 0;
+        padding: 0 0.35rem;
+        color: var(--muted);
+        font-size: 0.72rem;
+        line-height: 1.5;
+        text-align: center;
+      }
+
+      @media (max-width: 28rem) {
+        .button {
+          width: 100%;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .button {
+          transition: none;
+        }
+
+        .button:active {
+          transform: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="aeris-offline-teal" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#2f7188" />
+                <stop offset="1" stop-color="#174456" />
+              </linearGradient>
+            </defs>
+            <rect width="64" height="64" rx="18" fill="url(#aeris-offline-teal)" />
+            <g fill="#ffe08a">
+              <circle cx="47" cy="17" r="7.5" />
+              <path
+                d="M47 5.5v3M47 25.5v3M35.5 17h3M55.5 17h3"
+                stroke="#ffe08a"
+                stroke-width="2.2"
+                stroke-linecap="round"
+              />
+              <path
+                d="m39.3 9.3 1.8 1.8M52.9 22.9l1.8 1.8M39.3 24.7l1.8-1.8M54.7 10.1l-1.8 1.8"
+                stroke="#ffe08a"
+                stroke-width="2.2"
+                stroke-linecap="round"
+              />
+            </g>
+            <g fill="#f8fcf9">
+              <circle cx="21" cy="37" r="10" />
+              <circle cx="33" cy="28" r="12" />
+              <circle cx="43" cy="37" r="9" />
+              <rect x="11" y="35" width="42" height="14" rx="7" />
+            </g>
+            <path
+              d="M21 55h22"
+              stroke="#bfe5f4"
+              stroke-width="3.4"
+              stroke-linecap="round"
+            />
+          </svg>
+        </span>
+        <span class="brand-name">aeris</span>
+      </header>
+
+      <main class="card" id="main">
+        <div class="content">
+          <span class="status-icon" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path d="M12 20h.01" />
+              <path d="M8.5 16.4a5 5 0 0 1 7 0" />
+              <path d="M5 12.9a10 10 0 0 1 14 0" />
+              <path d="M2 9.3a15 15 0 0 1 20 0" />
+              <path d="m2 2 20 20" />
+            </svg>
+          </span>
+
+          <p class="eyebrow">Offline</p>
+          <h1>You're offline</h1>
+          <p class="lede">
+            Aeris can't reach the network right now, so a fresh forecast isn't available. This
+            page will get you back to the app when you reconnect.
+          </p>
+
+          <div class="note">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 11v5" />
+              <path d="M12 8h.01" />
+            </svg>
+            <p>
+              If the app shell is cached, your saved places — and possibly the last forecast — may
+              still be available. Reload once your connection is back for the latest sky.
+            </p>
+          </div>
+
+          <div class="actions">
+            <a class="button" href="/">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path d="M3 12a9 9 0 0 1 15.5-6.2L21 8" />
+                <path d="M21 3v5h-5" />
+                <path d="M21 12a9 9 0 0 1-15.5 6.2L3 16" />
+                <path d="M3 21v-5h5" />
+              </svg>
+              Reload Aeris
+            </a>
+          </div>
+
+          <p class="fine">
+            A live forecast needs a connection. Saved places and preferences stay in this browser.
+          </p>
+        </div>
+      </main>
+
+      <footer class="footer">
+        Forecasts by Open-Meteo · No account, no ads, no tracking scripts
+      </footer>
+    </div>
+  </body>
+</html>

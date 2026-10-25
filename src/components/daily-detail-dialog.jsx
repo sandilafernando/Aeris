@@ -53,7 +53,13 @@ function DetailRow({ icon: Icon, label, value, supporting }) {
   );
 }
 
-export default function DailyDetailDialog({ day, timezone, locationName, onClose }) {
+export default function DailyDetailDialog({
+  day,
+  timezone,
+  locationName,
+  onClose,
+  onCloseAutoFocus,
+}) {
   const { temperatureUnit, windUnit, measurementSystem } = usePreferences();
   if (!day) return null;
 
@@ -70,6 +76,7 @@ export default function DailyDetailDialog({ day, timezone, locationName, onClose
     <Dialog open onOpenChange={(open) => (!open ? onClose() : null)}>
       <DialogContent
         showCloseButton
+        onCloseAutoFocus={onCloseAutoFocus}
         className="dialog-surface max-h-[min(90dvh,760px)] w-[calc(100%-1rem)] max-w-[34rem] gap-0 overflow-hidden rounded-[1.75rem] border-border bg-popover p-0 sm:w-[calc(100%-2rem)] sm:rounded-[2rem]"
       >
         <div className="max-h-[inherit] overflow-y-auto overscroll-contain px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-6 sm:px-7 sm:pt-7">

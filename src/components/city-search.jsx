@@ -52,6 +52,7 @@ export function CitySearch({
       choose(results[resolvedActiveIndex >= 0 ? resolvedActiveIndex : 0]);
     } else if (event.key === "Escape" && hasQuery) {
       event.preventDefault();
+      event.stopPropagation();
       setQuery("");
       setActiveIndex(-1);
     }

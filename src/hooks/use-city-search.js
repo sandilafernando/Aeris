@@ -24,8 +24,13 @@ export function useCitySearch(query) {
           language: "en",
           format: "json",
         });
+        const timeoutSignal = AbortSignal.timeout(12_000);
+        const signal =
+          typeof AbortSignal.any === "function"
+            ? AbortSignal.any([controller.signal, timeoutSignal])
+            : controller.signal;
         const response = await fetch(`${SEARCH_ENDPOINT}?${params.toString()}`, {
-          signal: controller.signal,
+          signal,
           headers: { Accept: "application/json" },
         });
         if (!response.ok) {
@@ -49,7 +54,10 @@ export function useCitySearch(query) {
           query: trimmed,
           status: "error",
           results: [],
-          error: "We couldn't search for places. Check your connection and try again.",
+          error:
+            error?.name === "TimeoutError"
+              ? "Place search timed out. Check your connection and try again."
+              : "We couldn't search for places. Check your connection and try again.",
         });
       }
     }, 350);

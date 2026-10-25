@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { LoaderCircle, LocateFixed, ShieldCheck, Sparkles } from "lucide-react";
 import { CitySearch } from "@/components/city-search";
 import { requestCurrentPlace } from "@/lib/geolocation";
@@ -15,6 +15,7 @@ const FEATURES = [
 export default function Onboarding({ onSelectPlace, onSelectCurrentPlace }) {
   const [geoStatus, setGeoStatus] = useState("idle");
   const [geoError, setGeoError] = useState("");
+  const requestIdRef = useRef(0);
 
   function handleSearchResult(result) {
     const place = placeFromSearchResult(result);
@@ -22,13 +23,17 @@ export default function Onboarding({ onSelectPlace, onSelectCurrentPlace }) {
   }
 
   async function handleLocate() {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setGeoError("");
     setGeoStatus("locating");
     try {
       const place = await requestCurrentPlace();
+      if (requestIdRef.current !== requestId) return;
       setGeoStatus("idle");
       onSelectCurrentPlace(place);
     } catch (error) {
+      if (requestIdRef.current !== requestId) return;
       setGeoStatus("error");
       setGeoError(error?.message || "We couldn't determine your position. Search for a city instead.");
     }

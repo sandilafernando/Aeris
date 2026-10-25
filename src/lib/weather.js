@@ -52,6 +52,12 @@ function numericOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function booleanish(value, fallback = null) {
+  if (value === true || value === 1 || value === "1") return true;
+  if (value === false || value === 0 || value === "0") return false;
+  return fallback;
+}
+
 function unixToMs(value) {
   const number = numericOrNull(value);
   return number === null ? null : number * 1000;
@@ -85,19 +91,21 @@ function readHourly(hourly = {}) {
         windDirection: hourly.wind_direction_10m?.[index],
         uvIndex: hourly.uv_index?.[index],
         visibility: hourly.visibility?.[index],
+        cloudCover: hourly.cloud_cover?.[index],
       };
       const hour = {
         time: values.time,
         temperature: numericOrNull(values.temperature),
         apparentTemperature: numericOrNull(values.apparentTemperature),
         humidity: numericOrNull(values.humidity),
-        isDay: Boolean(values.isDay),
+        isDay: booleanish(values.isDay),
         precipitationProbability: numericOrNull(values.precipitationProbability),
         precipitation: numericOrNull(values.precipitation),
         windSpeed: numericOrNull(values.windSpeed),
         windDirection: numericOrNull(values.windDirection),
         uvIndex: numericOrNull(values.uvIndex),
         visibility: numericOrNull(values.visibility),
+        cloudCover: numericOrNull(values.cloudCover),
       };
       hour.condition = getWeatherCondition(values.weatherCode);
       hour.timeMs = values.time;
@@ -151,9 +159,7 @@ export function normalizeWeather(payload, location, fetchedAt = Date.now()) {
     null;
   const currentCondition = getWeatherCondition(currentCode);
   const currentIsDay =
-    payload.current.is_day === undefined || payload.current.is_day === null
-      ? Boolean(next24[0]?.isDay)
-      : Boolean(payload.current.is_day);
+    booleanish(payload.current.is_day) ?? next24[0]?.isDay ?? true;
 
   const today = daily[0] || null;
 
@@ -223,6 +229,7 @@ export function buildWeatherUrl(location) {
       "is_day",
       "uv_index",
       "visibility",
+      "cloud_cover",
     ].join(","),
     daily: [
       "weather_code",

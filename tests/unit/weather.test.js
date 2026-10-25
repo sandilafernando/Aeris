@@ -22,6 +22,9 @@ import {
   formatShortDate,
   formatTime,
   localDateKey,
+  relativeElapsedLabel,
+  relativeFetchLabel,
+  relativeObservationLabel,
   relativeUpdateLabel,
   safeTimeZone,
 } from "../../src/lib/format.js";
@@ -29,6 +32,7 @@ import {
   normalizePlace,
   normalizePlacesState,
   normalizePreferences,
+  normalizeStationPreference,
   placeFromCoordinates,
   placeKey,
   placeLabel,
@@ -197,6 +201,17 @@ test("date and time helpers respect the location timezone", () => {
   assert.equal(formatDaylightDuration(null), "Unavailable");
   assert.equal(relativeUpdateLabel(FIXED_NOW, FIXED_NOW + 10_000), "Updated just now");
   assert.equal(relativeUpdateLabel(FIXED_NOW, FIXED_NOW + 120_000), "Updated 2 min ago");
+  assert.equal(relativeElapsedLabel(FIXED_NOW, FIXED_NOW + 30_000), "just now");
+  assert.equal(relativeElapsedLabel(FIXED_NOW, FIXED_NOW + 3_600_000), "1 hr ago");
+  assert.equal(relativeElapsedLabel(FIXED_NOW, FIXED_NOW + 2 * 86_400_000), "2 days ago");
+  assert.equal(relativeElapsedLabel(null, FIXED_NOW), null);
+  assert.equal(relativeObservationLabel(null, FIXED_NOW), "Observation time unavailable");
+  assert.equal(relativeFetchLabel(null, FIXED_NOW), "Fetch time unavailable");
+  assert.equal(
+    relativeObservationLabel(FIXED_NOW, FIXED_NOW + 120_000),
+    "Observed 2 min ago",
+  );
+  assert.equal(relativeFetchLabel(FIXED_NOW, FIXED_NOW + 120_000), "Fetched 2 min ago");
 });
 
 test("preference storage normalizes invalid values", () => {
@@ -204,14 +219,45 @@ test("preference storage normalizes invalid values", () => {
     theme: "system",
     temperatureUnit: "c",
     windUnit: "kmh",
+    reducedEffects: false,
+    stationId: "auto",
   });
   assert.deepEqual(
     normalizePreferences({ theme: "sepia", temperatureUnit: "f", windUnit: "knots" }),
-    { theme: "system", temperatureUnit: "f", windUnit: "kmh" },
+    {
+      theme: "system",
+      temperatureUnit: "f",
+      windUnit: "kmh",
+      reducedEffects: false,
+      stationId: "auto",
+    },
   );
   assert.deepEqual(
-    normalizePreferences({ theme: "dark", temperatureUnit: "c", windUnit: "mph" }),
-    { theme: "dark", temperatureUnit: "c", windUnit: "mph" },
+    normalizePreferences({
+      theme: "dark",
+      temperatureUnit: "c",
+      windUnit: "mph",
+      reducedEffects: true,
+      stationId: "colombo",
+    }),
+    {
+      theme: "dark",
+      temperatureUnit: "c",
+      windUnit: "mph",
+      reducedEffects: true,
+      stationId: "colombo",
+    },
+  );
+  assert.equal(normalizePreferences({ reducedEffects: "yes" }).reducedEffects, false);
+  assert.equal(normalizeStationPreference("  COLOMBO  "), "colombo");
+  assert.equal(normalizeStationPreference("auto"), "auto");
+  assert.equal(normalizeStationPreference("bad id!"), "auto");
+  assert.equal(normalizeStationPreference("x".repeat(81)), "auto");
+  assert.equal(normalizeStationPreference(null), "auto");
+  assert.equal(
+    normalizePreferences({ stationId: "not a station" }).stationId,
+    "auto",
+    "unknown or malformed manual IDs fall back to Automatic",
   );
 });
 

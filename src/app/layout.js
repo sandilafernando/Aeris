@@ -1,5 +1,6 @@
 import { Bricolage_Grotesque, Figtree } from "next/font/google";
 import { PreferencesProvider } from "@/components/preferences-provider";
+import { PwaManager } from "@/components/pwa-manager";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
@@ -34,6 +35,15 @@ export const metadata = {
     siteName: "Aeris",
   },
   robots: { index: true, follow: true },
+  manifest: "/manifest.webmanifest",
+  icons: {
+    apple: "/apple-touch-icon.png",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Aeris",
+  },
 };
 
 export const viewport = {
@@ -47,7 +57,7 @@ export const viewport = {
   ],
 };
 
-const themeInitScript = `(function(){try{var raw=localStorage.getItem("aeris:preferences:v1");var prefs=raw?JSON.parse(raw):{};var theme=prefs.theme||"system";var dark=theme==="dark"||(theme!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);var root=document.documentElement;root.classList.toggle("dark",dark);root.style.colorScheme=dark?"dark":"light";root.dataset.theme=theme;}catch(error){}})();`;
+const themeInitScript = `(function(){try{var raw=localStorage.getItem("aeris:preferences:v1");var prefs=raw?JSON.parse(raw):{};var theme=prefs.theme||"system";var dark=theme==="dark"||(theme!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);var root=document.documentElement;root.classList.toggle("dark",dark);root.style.colorScheme=dark?"dark":"light";root.dataset.theme=theme;root.dataset.effects=prefs.reducedEffects===true?"reduced":"full";}catch(error){}})();`;
 
 export default function RootLayout({ children }) {
   return (
@@ -62,6 +72,7 @@ export default function RootLayout({ children }) {
       <body className="min-h-dvh">
         <PreferencesProvider>
           <TooltipProvider delayDuration={450}>{children}</TooltipProvider>
+          <PwaManager />
         </PreferencesProvider>
       </body>
     </html>

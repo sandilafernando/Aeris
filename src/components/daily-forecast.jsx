@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ChevronRight, Droplet } from "lucide-react";
 import DailyDetailDialog from "@/components/daily-detail-dialog";
 import { WeatherLineIcon } from "@/components/weather-artwork";
@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 export default function DailyForecast({ daily, timezone, locationName }) {
   const { temperatureUnit } = usePreferences();
   const [selectedDay, setSelectedDay] = useState(null);
+  const openerRef = useRef(null);
   const range = temperatureRange(daily);
 
   if (!daily?.length) {
@@ -88,7 +89,10 @@ export default function DailyForecast({ daily, timezone, locationName }) {
             <li key={day.time}>
               <button
                 type="button"
-                onClick={() => setSelectedDay(day)}
+                onClick={(event) => {
+                  openerRef.current = event.currentTarget;
+                  setSelectedDay(day);
+                }}
                 aria-haspopup="dialog"
                 aria-label={ariaLabel}
                 className="group flex h-full min-h-[10.6rem] w-full flex-col rounded-[1.25rem] border border-outline-variant/70 bg-surface-container/40 p-3 text-left transition-[background-color,border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-surface-container/80 hover:shadow-[var(--shadow-soft)] focus-visible:-translate-y-0.5"
@@ -161,6 +165,10 @@ export default function DailyForecast({ daily, timezone, locationName }) {
         timezone={timezone}
         locationName={locationName}
         onClose={() => setSelectedDay(null)}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (openerRef.current?.isConnected) openerRef.current.focus();
+        }}
       />
     </section>
   );

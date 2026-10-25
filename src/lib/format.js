@@ -121,15 +121,36 @@ export function localDateKey(timestamp, timeZone) {
   }).format(date);
 }
 
+export function relativeElapsedLabel(timestamp, now = Date.now()) {
+  const date = toDate(timestamp);
+  if (!date || !Number.isFinite(now) || now <= 0) return null;
+  const elapsed = Math.max(0, now - date.getTime());
+  if (elapsed < 45_000) return "just now";
+  const minutes = Math.floor(elapsed / 60_000);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hr${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
 export function relativeUpdateLabel(updatedAt, now = Date.now()) {
   if (!updatedAt) return "Not updated";
-  const elapsed = Math.max(0, now - updatedAt);
-  if (elapsed < 45_000) return "Updated just now";
-  const minutes = Math.floor(elapsed / 60_000);
-  if (minutes < 60) return `Updated ${minutes} min ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Updated ${hours} hr${hours === 1 ? "" : "s"} ago`;
-  return "Update is over a day old";
+  const relative = relativeElapsedLabel(updatedAt, now);
+  if (!relative) return "Update time unavailable";
+  return relative === "just now" ? "Updated just now" : `Updated ${relative}`;
+}
+
+export function relativeObservationLabel(observedAt, now = Date.now()) {
+  if (!observedAt) return "Observation time unavailable";
+  const relative = relativeElapsedLabel(observedAt, now);
+  return relative ? `Observed ${relative}` : "Observation time unavailable";
+}
+
+export function relativeFetchLabel(fetchedAt, now = Date.now()) {
+  if (!fetchedAt) return "Fetch time unavailable";
+  const relative = relativeElapsedLabel(fetchedAt, now);
+  return relative ? `Fetched ${relative}` : "Fetch time unavailable";
 }
 
 export function formatDaylightDuration(seconds) {

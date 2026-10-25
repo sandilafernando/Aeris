@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Check,
   LoaderCircle,
@@ -31,11 +31,24 @@ export default function LocationDialog({
   onSelectPlace,
   onSelectCurrentPlace,
   onRemovePlace,
+  onCloseAutoFocus,
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [geoStatus, setGeoStatus] = useState("idle");
   const [geoError, setGeoError] = useState("");
+  const requestIdRef = useRef(0);
   const isSearching = searchQuery.trim().length > 0;
+
+  /* eslint-disable react-hooks/set-state-in-effect -- reset dialog-local status when the dialog opens or closes. */
+  useEffect(() => {
+    if (open) {
+      setGeoStatus("idle");
+      setGeoError("");
+    } else {
+      requestIdRef.current += 1;
+    }
+  }, [open]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   function handleSearchResult(result) {
     const place = placeFromSearchResult(result);
@@ -45,13 +58,17 @@ export default function LocationDialog({
   }
 
   async function handleLocate() {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setGeoError("");
     setGeoStatus("locating");
     try {
       const place = await requestCurrentPlace();
+      if (requestIdRef.current !== requestId) return;
       setGeoStatus("idle");
       onSelectCurrentPlace(place);
     } catch (error) {
+      if (requestIdRef.current !== requestId) return;
       setGeoStatus("error");
       setGeoError(
         error?.message || "We couldn't determine your position. Search for a city instead.",
@@ -63,6 +80,10 @@ export default function LocationDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          onCloseAutoFocus?.();
+        }}
         className="dialog-surface flex max-h-[min(90dvh,780px)] w-[calc(100%-1rem)] max-w-[40rem] flex-col gap-0 overflow-hidden rounded-[1.75rem] border-border bg-popover p-0 sm:w-[calc(100%-2rem)] sm:rounded-[2rem]"
       >
         <DialogHeader className="shrink-0 px-5 pb-4 pt-6 sm:px-7 sm:pt-7">

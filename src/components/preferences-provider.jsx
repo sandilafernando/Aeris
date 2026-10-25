@@ -38,6 +38,9 @@ export function PreferencesProvider({ children }) {
 
   useEffect(() => {
     applyTheme(preferences.theme, resolvedTheme);
+    document.documentElement.dataset.effects = preferences.reducedEffects
+      ? "reduced"
+      : "full";
     savePreferences(preferences);
   }, [preferences, resolvedTheme]);
 
@@ -52,10 +55,14 @@ export function PreferencesProvider({ children }) {
       theme: preferences.theme,
       temperatureUnit: preferences.temperatureUnit,
       windUnit: preferences.windUnit,
+      reducedEffects: preferences.reducedEffects,
+      stationId: preferences.stationId,
       measurementSystem: preferences.windUnit === "mph" ? "imperial" : "metric",
       setTheme: (theme) => updatePreferences({ theme }),
       setTemperatureUnit: (temperatureUnit) => updatePreferences({ temperatureUnit }),
       setWindUnit: (windUnit) => updatePreferences({ windUnit }),
+      setReducedEffects: (reducedEffects) => updatePreferences({ reducedEffects }),
+      setStationId: (stationId) => updatePreferences({ stationId }),
     }),
     [preferences, resolvedTheme, updatePreferences],
   );

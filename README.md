@@ -1,19 +1,23 @@
 # Aeris
 
-Aeris is a responsive, Material 3 Expressive-inspired weather dashboard built with Next.js, React, Tailwind CSS, and real forecast data from [Open-Meteo](https://open-meteo.com/). Search for a city or use browser geolocation to see current conditions, the next 24 hours, and a seven-day outlook. No account, API key, or backend is required.
+Aeris is a responsive, Material 3 Expressive-inspired weather dashboard built with Next.js, React, Tailwind CSS, live forecasts from [Open-Meteo](https://open-meteo.com/), and current station observations from the Sri Lanka Department of Meteorology (DoM). Search for a city or use browser geolocation to see current conditions, the next 24 hours, and a seven-day outlook. Saved places, preferences, and the installed app stay on your device. No account, API key, database, or analytics are involved.
 
 ![Aeris dashboard in light mode](docs/screenshots/dashboard-light.png)
 
 ## Highlights
 
-- **Current conditions** — temperature, feels-like temperature, daily high/low, condition, precipitation, wind, humidity, pressure, visibility, cloud cover, and UV.
+- **Current conditions** — temperature, feels-like temperature, daily high/low, condition, precipitation, wind, humidity, pressure, visibility, cloud cover, and UV, with an animated condition illustration.
+- **Sri Lankan station observations** — the DoM station nearest the selected place, shown beside the forecast with separate attribution, observation time, relative freshness, and explicit stale, missing, and unavailable states.
+- **Station selection** — automatic selection prefers a fresh usable observation over a nearer stale one. A manual choice is saved, shared between the dashboard and Preferences, and never silently replaced.
 - **Hourly forecast** — 24 hourly steps with condition, temperature, and precipitation probability.
 - **Seven-day outlook** — daily high/low ranges, conditions, rain chance, and a detail dialog with sunrise, sunset, UV, wind, and precipitation.
+- **Weather Desk** — Plan, Rain, Spread, Compare, and History tools for the active place, with model spread labelled as a model rather than an observation.
 - **Place search** — debounced Open-Meteo geocoding with keyboard navigation, empty states, and retry handling.
 - **Browser geolocation** — optional current-position forecast that stays session-only.
 - **Saved places** — up to 20 locations, persisted in `localStorage`, with switching and removal.
-- **Preferences** — Celsius/Fahrenheit, km/h, mph, or m/s, plus light, dark, and system themes.
-- **Resilient states** — loading skeletons, retryable errors, stale-forecast notices, offline messaging, automatic 15-minute refresh, and refresh-on-reconnect.
+- **Preferences** — Celsius/Fahrenheit, km/h, mph, or m/s, light, dark, and system themes, reduced effects, and the saved station.
+- **Resilient states** — loading skeletons, retryable errors, stale-forecast notices, offline messaging, automatic refresh, and refresh-on-reconnect.
+- **Installable PWA** — a production service worker caches the app shell for offline launches, serves a dedicated offline page, and never caches weather API responses.
 - **Responsive and accessible** — layouts verified from 360 px through 1440 px, keyboard-friendly controls, reduced-motion support, and automated WCAG 2.2 AA checks.
 
 ### Desktop, dark, and mobile
@@ -28,10 +32,11 @@ The onboarding screen is shown before a first place is chosen:
 
 ## Stack
 
-- **Framework:** Next.js 16.4 (App Router, Cache Components)
+- **Framework:** Next.js 16.4 (App Router, Cache Components, one route handler)
 - **UI:** React 19, Tailwind CSS 4, shadcn/ui primitives built on Radix UI, Lucide icons
-- **Motion:** Motion for React, with reduced-motion handling
-- **Data:** Open-Meteo Forecast API and Geocoding API
+- **Motion:** Motion for React and CSS animations, with reduced-motion handling
+- **Data:** Open-Meteo Forecast, Ensemble, Archive, and Geocoding APIs; Sri Lanka Department of Meteorology station observations
+- **Offline:** Hand-written service worker and web app manifest
 - **Testing:** Node's built-in test runner, Playwright, axe-core
 - **Language:** JavaScript (JSX), no TypeScript
 - **Deployment target:** Vercel (no environment variables required)
@@ -45,7 +50,9 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Forecast and search requests go directly from the browser to Open-Meteo. There is no `.env` file and no key to configure.
+Open [http://localhost:3000](http://localhost:3000). Forecast, ensemble, archive, and search requests go directly from the browser to Open-Meteo. DoM observations are read by a same-origin route handler because `meteo.gov.lk` does not allow cross-origin browser requests. There is no `.env` file and no key to configure.
+
+The service worker is registered only in a production build. Use `npm run build && npm run start` to exercise install and offline behavior; the dev server intentionally runs without it so stale caches cannot mask local changes.
 
 ## Scripts
 
@@ -55,7 +62,7 @@ Open [http://localhost:3000](http://localhost:3000). Forecast and search request
 | `npm run build` | Create an optimized production build |
 | `npm run start` | Serve the production build |
 | `npm run lint` | Run ESLint across the project |
-| `npm run test:unit` | Run Node unit tests for weather, storage, formatting, and palettes |
+| `npm run test:unit` | Run Node unit tests for weather, storage, formatting, palettes, station selection, the DoM parser, cache behavior, and presence parsing |
 | `npm run test:e2e` | Build, start the production server, and run all Playwright tests |
 | `PW_DEV=1 npm run test:e2e` | Run Playwright against an existing dev server |
 
@@ -77,11 +84,11 @@ PW_BUNDLED=1 npm run test:e2e
 
 The suite covers:
 
-- **13 unit tests** for condition mapping, forecast normalization, URL construction, unit conversion, time formatting, storage sanitization, and palette resolution.
-- **18 Playwright tests** for onboarding, keyboard search, forecast rendering, refresh success and failure, saved-place management, preference persistence, initial errors, offline recovery, geolocation, empty search, responsive overflow, and daily-card reflow.
+- **34 unit tests** for condition mapping, forecast normalization, URL construction, unit conversion, time formatting, storage sanitization, palette resolution, DoM HTML parsing, station selection and freshness ranking, cached-fetch fallback, and presence parsing.
+- **27 Playwright tests** for onboarding, keyboard search, forecast rendering, station selection and persistence, stale and unavailable observation states, Weather Desk tools, refresh success and failure, saved-place management, preference persistence, initial errors, offline recovery, geolocation, empty search, responsive overflow, daily-card reflow, and production service-worker caching and offline boot.
 - **Accessibility scans** with axe-core on the onboarding screen, light and dark dashboards, day-detail dialog, preferences dialog, and location dialog. No automated WCAG 2.2 A/AA violations were found in the tested surfaces.
 
-Playwright intercepts Open-Meteo requests with deterministic fixtures so runs do not depend on live conditions. Screenshots saved during the responsive run are written to `test-results/screenshots/`; selected production screenshots are checked in under `docs/screenshots/`.
+Playwright intercepts Open-Meteo and the DoM route with deterministic fixtures so runs do not depend on live conditions. Observation fixtures are aged relative to the browser clock, so freshness and stale behavior can be tested at any time. Screenshots saved during the responsive run are written to `test-results/screenshots/`; selected production screenshots are checked in under `docs/screenshots/`.
 
 These are automated checks, not a substitute for a manual screen-reader and assistive-technology audit.
 
@@ -89,14 +96,20 @@ These are automated checks, not a substitute for a manual screen-reader and assi
 
 ```text
 src/
-  app/                 Next.js app shell, metadata, global styles
-  components/          Dashboard, dialogs, cards, charts, UI primitives
-  hooks/               Weather loading, city search, online status, clock
-  lib/                 API normalization, storage, formatting, palettes
+  app/                 Next.js app shell, metadata, global styles, icon
+  app/api/weather/     Same-origin route handler for DoM observations
+  components/          Dashboard, station card, Weather Desk, dialogs, UI primitives
+  hooks/               Weather loading, station source, city search, presence, PWA
+  lib/                 API normalization, storage, station selection, formatting,
+                       palettes, DoM parsing and cache helpers
+public/
+  sw.js                App-shell service worker (production only)
+  offline.html         Offline fallback page
+  icons/               PWA and platform icons
 tests/
   unit/                Node test runner suites
-  e2e/                 Playwright functional, axe, and responsive suites
-  fixtures/            Deterministic Open-Meteo payloads
+  e2e/                 Playwright functional, station, axe, and responsive suites
+  fixtures/            Deterministic Open-Meteo and DoM payloads
 docs/screenshots/      Production screenshots used in this README
 ```
 
@@ -104,27 +117,37 @@ Key implementation details:
 
 - `src/lib/weather.js` builds the Open-Meteo request and normalizes the response into a small, defensive view model. Missing optional fields become `null` and render as unavailable instead of breaking the page.
 - `src/hooks/use-weather.js` deduplicates in-flight requests, keeps a 10-minute in-memory cache, enforces a 15-second request timeout, and preserves the previous forecast when a refresh fails.
-- `src/components/weather-app.jsx` owns saved places, the active location, refresh scheduling, reconnect refresh, and the page-level loading/error/offline states.
-- Preferences and places persist under `aeris:preferences:v1` and `aeris:places:v1`. Coordinates are rounded to three decimal places before storage and API use.
+- `src/components/weather-app.jsx` owns saved places, the active location, the shared DoM request, station preference, refresh scheduling, reconnect refresh, and the page-level loading/error/offline states.
+- `src/app/api/weather/sri-lanka-dom/route.js` fetches and parses the DoM homepage server-side, caches a successful result for five minutes, serves stale data for up to six hours with an explicit stale status, and returns a typed error when no usable observation exists.
+- `src/lib/station-selection.js` contains the automatic and manual station rules: Sri Lanka detection, approximate distance, freshness and usability checks, and the unavailable-manual fallback.
+- `src/components/official-observations.jsx` renders one station observation beside the primary forecast. The two sources are never averaged or blended, and each carries its own attribution and timestamp.
+- Preferences and places persist under `aeris:preferences:v1` and `aeris:places:v1`. Coordinates are rounded to three decimal places before storage and API use. `stationId` defaults to `"auto"`.
 - Each weather condition family has a light and dark palette. Palette values are exposed as CSS variables on the document root, including separate day and night hero treatments.
-- The theme is initialized by a small inline script before hydration to avoid a light-mode flash. `useNow()` intentionally starts at zero so Cache Components can prerender without reading the current time.
-- Dialogs use Radix primitives for focus trapping, Escape handling, and restoration. Motion animations are disabled when the user prefers reduced motion.
+- The theme and reduced-effects flag are initialized by a small inline script before hydration to avoid a flash. `useNow()` intentionally starts at zero so Cache Components can prerender without reading the current time.
+- Dialogs use Radix primitives for focus trapping, Escape handling, and restoration. Motion animations are disabled when the user prefers reduced motion or enables **Reduce effects**.
+- `public/sw.js` caches only stable same-origin shell assets plus the hashed CSS, JS, and fonts referenced by the cached document. It bypasses `/api/*`, Next.js data and image routes, third-party origins, and non-GET requests, and is versioned so an update replaces the previous cache.
 
 ## Data and privacy
 
-- Forecasts come from the Open-Meteo Forecast API. Place search uses the Open-Meteo Geocoding API, which is based on GeoNames data.
-- Requests are made directly from the browser. Aeris has no server-side weather proxy, analytics, advertising, or tracking scripts.
-- Saved places and preferences remain in this browser's `localStorage`. The current-location forecast is held in memory for the session and is not saved. The current coordinates are rounded before being used.
-- Open-Meteo data is provided under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution is shown in the app footer. Aeris is not affiliated with Google.
-- Weather data is informational and is not a substitute for official severe-weather warnings or emergency guidance.
+- Forecasts, hourly data, and current conditions come from the Open-Meteo Forecast API. Place search uses the Open-Meteo Geocoding API, which is based on GeoNames data. Weather Desk's spread and history tools use Open-Meteo's ensemble and archive APIs.
+- Current station observations come from the [Sri Lanka Department of Meteorology](https://meteo.gov.lk/). The browser calls Aeris's own `/api/weather/sri-lanka-dom` route, which retrieves and parses the public DoM homepage. That route takes no parameters, so no place name, coordinates, saved place, or preference is sent with it.
+- Forecast, search, ensemble, and archive requests go directly from the browser to Open-Meteo. Aeris has no database, accounts, analytics, advertising, or tracking scripts.
+- The footer's best-effort “here now” count exchanges a random per-tab ID and a timestamp through the public [ntfy.sh](https://ntfy.sh/) relay. The topic is public: never treat the count as authenticated or private. No account, location, or personal data is sent. If the relay is blocked or rate-limited, the chip reports that the count is unavailable instead of guessing.
+- Saved places and preferences remain in this browser's `localStorage`. The current-location forecast is held in memory for the session and is not saved. Current coordinates are rounded before use.
+- A production service worker caches the app shell and stable static assets. It does not cache `/api` routes or weather responses, so a fresh reload still needs the network for live data.
+- Open-Meteo data is provided under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Open-Meteo and DoM attribution is shown in the app. Aeris is not affiliated with Google, Open-Meteo, or the Department of Meteorology.
+- Weather data is informational. Aeris does not display official warnings, and nothing here is a substitute for government-issued severe-weather guidance or emergency instructions.
 
 ## Known limitations
 
 - **No radar.** Consumer radar tile services have restrictive licensing and attribution requirements, so a radar layer was deliberately left out rather than simulated.
-- **No official alerts layer.** The app shows forecast conditions, not government-issued warnings.
-- **No offline persistence.** The last forecast remains visible while the tab is open and offline, but a reload without a connection requires the network again. There is no service worker.
+- **No official bulletins or advisories.** The app shows forecast conditions and DoM station observations, not government-issued warnings. Check the Department of Meteorology directly for official alerts.
+- **Approximate station locations.** DoM does not publish station coordinates on the page Aeris reads. Distance and automatic selection therefore use documented approximate city-centre reference points, labelled in the interface as Aeris reference points rather than official station coordinates.
+- **Automatic selection is Sri Lanka only.** Outside Sri Lanka the card explains that there is no automatic match, while a manual DoM station can still be chosen.
+- **DoM parsing can break.** Observations are read from an HTML page with no documented API. If the markup changes, Aeris shows an unavailable state rather than inventing a reading.
+- **Offline shell only.** The installed app can launch from cache, but live forecasts and station observations still require a network connection.
 - **No reverse geocoding.** Browser coordinates are labelled “Current location” rather than resolved to a street address or city name.
-- **Live-service dependency.** Search and forecasts require access to Open-Meteo and are subject to its availability, CORS policy, and rate limits.
+- **Live-service dependency.** Search, forecasts, and station observations require Open-Meteo and DoM to be reachable and are subject to their availability, CORS policy, and rate limits. The presence count additionally depends on ntfy.sh.
 - **Local-only personal data.** Clearing browser storage removes saved places and preferences. Saved places do not sync across devices.
 - **Automated accessibility only.** Automated axe scans pass, but a manual screen-reader audit has not been performed.
 
@@ -148,4 +171,4 @@ After authenticating with `npx vercel login`:
 npx vercel --prod
 ```
 
-The app is statically prerendered where possible and uses client-side requests for live weather data. A production URL is only available after the project is connected to a Vercel account.
+The app is statically prerendered except for the DoM observation route, which runs on demand and holds a short in-memory cache. A production URL is only available after the project is connected to a Vercel account.

@@ -1,32 +1,42 @@
 "use client";
 
-import { ArrowUpRight, CloudRain, ThermometerSun } from "lucide-react";
+import { ArrowUpRight, CloudRain, ExternalLink, ThermometerSun, Wind } from "lucide-react";
 import { WeatherHeroArt } from "@/components/weather-artwork";
+import WeatherScene from "@/components/weather-scene";
 import { usePreferences } from "@/components/preferences-provider";
 import { formatLocalDate, formatFullDateTime, formatTime } from "@/lib/format";
 import {
   buildOutlook,
   formatPrecipitation,
   formatTemperature,
-  temperatureSymbol,
+  formatWind,
 } from "@/lib/weather";
 
 export default function CurrentWeatherHero({ data, location, now }) {
-  const { temperatureUnit, measurementSystem } = usePreferences();
+  const { temperatureUnit, windUnit, measurementSystem } = usePreferences();
   const { current, timezone } = data;
   const unitLabel = temperatureUnit === "f" ? "Fahrenheit" : "Celsius";
   const outlook = buildOutlook(data.hourly, current);
   const localDate = formatLocalDate(now, timezone);
   const localTime = formatTime(now, timezone);
   const updated = formatTime(data.fetchedAt, timezone);
+  const fetchedAtMs = Number.isFinite(data.fetchedAt) ? data.fetchedAt : null;
+  const fetchedAtIso = fetchedAtMs == null ? undefined : new Date(fetchedAtMs).toISOString();
   const precipitation = formatPrecipitation(current.precipitation, measurementSystem);
+  const wind = formatWind(current.windSpeed, windUnit);
   const hasRange = Number.isFinite(current.high) && Number.isFinite(current.low);
+  const conditionKey = `${current.condition.group}-${current.isDay ? "day" : "night"}`;
 
   return (
     <section
       aria-labelledby="current-weather-heading"
       className="hero-surface relative flex h-full min-h-[29rem] flex-col overflow-hidden rounded-[1.85rem] p-5 shadow-[var(--shadow-soft)] sm:p-7 md:rounded-[2.4rem] md:p-8 lg:min-h-[32rem] lg:p-9"
     >
+      <WeatherScene
+        group={current.condition.group}
+        isDay={current.isDay}
+        intensity="subtle"
+      />
       <h2 id="current-weather-heading" className="sr-only">
         Current conditions in {location.name}
       </h2>
@@ -53,17 +63,20 @@ export default function CurrentWeatherHero({ data, location, now }) {
             style={{ backgroundColor: "var(--hero-art-detail)" }}
           />
           <span>
-            Updated <time dateTime={new Date(data.fetchedAt).toISOString()}>{updated}</time>
+            Updated{" "}
+            <time dateTime={fetchedAtIso}>{fetchedAtMs == null ? "Unavailable" : updated}</time>
           </span>
-          <span className="sr-only"> local time, {formatFullDateTime(data.fetchedAt, timezone)}</span>
+          {fetchedAtMs == null ? null : (
+            <span className="sr-only"> local time, {formatFullDateTime(fetchedAtMs, timezone)}</span>
+          )}
         </p>
       </div>
 
-      <div className="mt-7 grid flex-1 grid-cols-[minmax(0,1fr)_clamp(7.5rem,36vw,16rem)] items-center gap-1 sm:mt-9 sm:gap-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="mt-6 grid flex-1 grid-cols-[minmax(0,1fr)_clamp(9rem,33vw,20rem)] items-center gap-1 sm:mt-8 sm:gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="relative z-10 min-w-0">
           <p
             data-testid="current-temperature"
-            className="number-tabular relative flex items-start font-display text-[clamp(4.9rem,18vw,10rem)] font-medium leading-[0.78] tracking-[-0.075em]"
+            className="number-tabular relative flex items-start font-display text-[clamp(4.6rem,17.5vw,9.75rem)] font-medium leading-[0.78] tracking-[-0.075em]"
           >
             <span className="sr-only">
               Current temperature{" "}
@@ -121,9 +134,14 @@ export default function CurrentWeatherHero({ data, location, now }) {
           </div>
         </div>
 
-        <div className="relative flex items-center justify-center">
-          <div className="w-full">
-            <WeatherHeroArt group={current.condition.group} isDay={current.isDay} />
+        <div className="relative -my-2 flex items-center justify-center sm:my-0">
+          <div className="mx-auto w-full max-w-[22rem]">
+            <WeatherHeroArt
+              key={conditionKey}
+              group={current.condition.group}
+              isDay={current.isDay}
+              windSpeed={current.windSpeed}
+            />
           </div>
         </div>
       </div>
@@ -132,13 +150,28 @@ export default function CurrentWeatherHero({ data, location, now }) {
         className="mt-5 flex flex-col gap-2.5 border-t pt-4 text-sm sm:flex-row sm:items-center sm:justify-between"
         style={{ borderColor: "var(--hero-line)" }}
       >
-        <p
-          className="inline-flex items-center gap-2 font-medium"
-          style={{ color: "var(--hero-ink)" }}
-        >
-          <CloudRain aria-hidden="true" className="size-4 shrink-0" style={{ color: "var(--hero-art-detail)" }} />
-          {precipitation === "Unavailable" ? "Precipitation unavailable" : `${precipitation} precipitation now`}
-        </p>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <p
+            className="inline-flex items-center gap-2 font-medium"
+            style={{ color: "var(--hero-ink)" }}
+          >
+            <CloudRain
+              aria-hidden="true"
+              className="size-4 shrink-0"
+              style={{ color: "var(--hero-art-detail)" }}
+            />
+            {precipitation === "Unavailable"
+              ? "Precipitation unavailable"
+              : `${precipitation} precipitation now`}
+          </p>
+          <p
+            className="inline-flex items-center gap-1.5 text-[0.8rem] font-medium"
+            style={{ color: "var(--hero-muted)" }}
+          >
+            <Wind aria-hidden="true" className="size-4 shrink-0" />
+            {wind === "Unavailable" ? "Wind unavailable" : `${wind} wind`}
+          </p>
+        </div>
         <p
           className="inline-flex items-center gap-1.5 text-[0.8rem] font-medium"
           style={{ color: "var(--hero-muted)" }}
@@ -147,6 +180,29 @@ export default function CurrentWeatherHero({ data, location, now }) {
           {outlook}
         </p>
       </div>
+
+      <p
+        className="mt-2.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[0.66rem] leading-4"
+        style={{ color: "var(--hero-muted)" }}
+      >
+        <span className="font-semibold" style={{ color: "var(--hero-ink)" }}>
+          Model forecast
+        </span>
+        <span aria-hidden="true">·</span>
+        <a
+          href="https://open-meteo.com/"
+          target="_blank"
+          rel="noreferrer noopener"
+          className="inline-flex min-h-7 items-center gap-1 font-semibold underline decoration-current/35 underline-offset-2 transition-opacity hover:opacity-80"
+          style={{ color: "var(--hero-ink)" }}
+        >
+          Open-Meteo
+          <ExternalLink aria-hidden="true" className="size-2.5" />
+          <span className="sr-only">(opens in a new tab)</span>
+        </a>
+        <span aria-hidden="true">·</span>
+        <span>not an official station observation.</span>
+      </p>
 
       <span className="sr-only">Temperature shown in degrees {unitLabel}.</span>
     </section>

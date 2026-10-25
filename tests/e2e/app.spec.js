@@ -241,9 +241,18 @@ test.describe("geolocation", () => {
     const places = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), PLACES_KEY);
     expect(places.saved).toHaveLength(0);
 
-    // Current-location coordinates are session-only, so a reload returns to onboarding.
+    // Current-location coordinates stay in session storage for this tab, so a
+    // reload keeps the forecast without adding it to the saved-places list.
     await page.reload();
-    await expect(page.getByTestId("onboarding")).toBeVisible();
+    await expect(page.getByTestId("weather-dashboard")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: /Weather forecast for Current location/i }),
+    ).toBeAttached();
+    const restoredPlaces = await page.evaluate(
+      (key) => JSON.parse(localStorage.getItem(key)),
+      PLACES_KEY,
+    );
+    expect(restoredPlaces.saved).toHaveLength(0);
   });
 });
 

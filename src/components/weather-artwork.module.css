@@ -1,0 +1,297 @@
+/*
+ * The hero illustration is decorative. Every animation is transform/opacity
+ * only, uses no random values during render, and is disabled by the app's
+ * reduced-motion preference (via [data-effects="reduced"] in globals.css) and
+ * by the operating system's reduced-motion setting.
+ */
+
+.heroArt {
+  animation: heroArtIn 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.glyph {
+  display: block;
+}
+
+.halo {
+  background:
+    radial-gradient(
+      circle at 52% 44%,
+      color-mix(in srgb, var(--hero-art-primary) 24%, transparent),
+      transparent 64%
+    ),
+    radial-gradient(
+      circle at 68% 72%,
+      color-mix(in srgb, var(--hero-art-detail) 16%, transparent),
+      transparent 58%
+    );
+  filter: blur(12px);
+  animation: haloBreathe 9s ease-in-out infinite;
+}
+
+.ringOuter {
+  animation: ringTurn 52s linear infinite;
+}
+
+.ringInner {
+  animation: ringTurnReverse 68s linear infinite;
+}
+
+.sunRays {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sunRaysSpin 86s linear infinite;
+}
+
+.sunCore {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sunPulse 5.2s ease-in-out infinite;
+}
+
+.moonFloat {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: moonFloat 8.5s ease-in-out infinite;
+}
+
+.cloudFloat {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cloudFloat 9.5s ease-in-out infinite;
+  animation-delay: var(--cloud-delay, 0s);
+}
+
+.rainDrop {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: rainDrop 1.7s linear infinite;
+  animation-delay: var(--rain-delay, 0s);
+}
+
+.snowFlake {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: snowFlake 5.5s ease-in-out infinite;
+  animation-delay: var(--snow-delay, 0s);
+}
+
+.fogLine {
+  animation: fogLine 7.5s ease-in-out infinite;
+  animation-delay: var(--fog-delay, 0s);
+}
+
+.bolt {
+  animation: boltFlash 7.5s steps(1, end) infinite;
+}
+
+.windLine {
+  stroke-dasharray: 24 18;
+  animation: windFlow 5.2s linear infinite;
+  animation-delay: var(--wind-delay, 0s);
+}
+
+.heroStar {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: starTwinkle 4.8s ease-in-out infinite;
+  animation-delay: var(--star-delay, 0s);
+}
+
+.artDot {
+  animation: dotFloat 7s ease-in-out infinite;
+}
+
+@keyframes heroArtIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.955);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes haloBreathe {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 0.94;
+    transform: scale(1.035);
+  }
+}
+
+@keyframes ringTurn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ringTurnReverse {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@keyframes sunRaysSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes sunPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.035);
+  }
+}
+
+@keyframes moonFloat {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(1deg);
+  }
+}
+
+@keyframes cloudFloat {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(4px, -4px);
+  }
+}
+
+@keyframes rainDrop {
+  0% {
+    opacity: 0.25;
+    transform: translateY(-4px);
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes snowFlake {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 0.55;
+  }
+  50% {
+    transform: translate(3px, -5px) rotate(45deg);
+    opacity: 0.95;
+  }
+}
+
+@keyframes fogLine {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: translateX(-3px);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translateX(4px);
+  }
+}
+
+@keyframes boltFlash {
+  0%,
+  84%,
+  90%,
+  100% {
+    opacity: 0.72;
+  }
+  86%,
+  92% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes windFlow {
+  to {
+    stroke-dashoffset: -84;
+  }
+}
+
+@keyframes starTwinkle {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.78);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+}
+
+@keyframes dotFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+/* The `data-effects` attribute lives on <html>, outside the module's scope.
+ * Attribute selectors are not hashed by CSS Modules, so no :global() escape is
+ * needed (and Turbopack's parser rejects :global() in native CSS modules). */
+[data-effects="reduced"] .heroArt,
+[data-effects="reduced"] .halo,
+[data-effects="reduced"] .ringOuter,
+[data-effects="reduced"] .ringInner,
+[data-effects="reduced"] .sunRays,
+[data-effects="reduced"] .sunCore,
+[data-effects="reduced"] .moonFloat,
+[data-effects="reduced"] .cloudFloat,
+[data-effects="reduced"] .rainDrop,
+[data-effects="reduced"] .snowFlake,
+[data-effects="reduced"] .fogLine,
+[data-effects="reduced"] .bolt,
+[data-effects="reduced"] .windLine,
+[data-effects="reduced"] .heroStar,
+[data-effects="reduced"] .artDot {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heroArt,
+  .halo,
+  .ringOuter,
+  .ringInner,
+  .sunRays,
+  .sunCore,
+  .moonFloat,
+  .cloudFloat,
+  .rainDrop,
+  .snowFlake,
+  .fogLine,
+  .bolt,
+  .windLine,
+  .heroStar,
+  .artDot {
+    animation: none !important;
+  }
+}

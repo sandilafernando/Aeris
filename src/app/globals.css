@@ -308,6 +308,22 @@
     font-variant-numeric: tabular-nums lining-nums;
   }
 
+  /*
+   * Progressive enhancement only: the base state is fully visible and legible.
+   * Browsers without scroll-driven animations simply show the content. A
+   * reduced-effects preference or the OS reduced-motion setting turns the
+   * reveal off entirely.
+   */
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .scroll-reveal {
+        animation: scroll-reveal-in linear both;
+        animation-timeline: view();
+        animation-range: entry 0% entry 70%;
+      }
+    }
+  }
+
   .safe-top {
     padding-top: env(safe-area-inset-top, 0px);
   }
@@ -339,11 +355,62 @@
   }
 }
 
+@keyframes scroll-reveal-in {
+  from {
+    /* Keep text at full contrast while it moves. Animating opacity below 1
+     * here briefly fails WCAG contrast checks and reduces readability. */
+    transform: translateY(0.7rem);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes desk-panel-in {
+  from {
+    transform: translateY(0.6rem);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes desk-card-in {
+  from {
+    transform: translateY(0.5rem) scale(0.99);
+  }
+  to {
+    transform: translateY(0) scale(1);
+  }
+}
+
 .soft-pulse {
   animation: soft-pulse 7s ease-in-out infinite;
 }
 
+.desk-panel-enter {
+  animation: desk-panel-in 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.desk-card-enter {
+  animation: desk-card-in 440ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+[data-effects="reduced"] .scroll-reveal,
+[data-effects="reduced"] .soft-pulse,
+[data-effects="reduced"] .desk-panel-enter,
+[data-effects="reduced"] .desk-card-enter {
+  animation: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .scroll-reveal,
+  .soft-pulse,
+  .desk-panel-enter,
+  .desk-card-enter {
+    animation: none !important;
+  }
+
   html {
     scroll-behavior: auto;
   }
