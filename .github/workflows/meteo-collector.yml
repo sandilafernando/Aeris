@@ -1,5 +1,5 @@
 
-name: Collect Sri Lanka Meteorology Data
+name: Collect Sri Lanka Weather Data
 
 on:
   workflow_dispatch:
@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - name: Check out repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install parser
+      - name: Install dependencies
         run: pip install requests beautifulsoup4
 
       - name: Fetch and filter official website
@@ -36,160 +36,145 @@ jobs:
           import json
           import os
           import re
+          import time
           from datetime import datetime, timezone
-          from urllib.parse import urljoin, urldefrag
+          from urllib.parse import urljoin, urlparse
+
           import requests
           from bs4 import BeautifulSoup
 
-          source = "https://meteo.gov.lk/"
+          SOURCES = [
+              "https://www.meteo.gov.lk/index.php?lang=en",
+              "https://meteo.gov.lk/",
+              "https://meteo.gov.lk/qris/",
+          ]
 
-          keywords = re.compile(
-              r"weather|observ|station|rainfall|rain|temperature|"
-              r"humidity|wind|pressure|forecast|meteorolog|"
-              r"satellite|radar|climate|map",
-              re.IGNORECASE
-          )
-
-          response = requests.get(
-              source,
-              headers={
-                  "User-Agent": "WeatherDataCollector/1.0 "
-                                "(personal weather project)",
-                  "Accept": "text/html,application/xhtml+xml"
-              },
-              timeout=30
-          )
-          response.raise_for_status()
-
-          content_type = response.headers.get("Content-Type", "")
-          if "html" not in content_type.lower():
-              raise RuntimeError(
-                  f"Expected HTML but received {content_type!r}"
-              )
-
-          soup = BeautifulSoup(response.text, "html.parser")
-
-          title = soup.title.get_text(" ", strip=True) if soup.title else None
-
-          description_tag = soup.find(
-              "meta", attrs={"name": "description"}
-          )
-          description = (
-              description_tag.get("content", "").strip()
-              if description_tag else None
-          )
-
-          # Extract relevant visible text; do not interpret it as
-          # verified station measurements.
-          for tag in soup(["script", "style", "noscript", "svg"]):
-              tag.decompose()
-
-          text_items = []
-          seen_text = set()
-
-          for tag in soup.find_all(
-              ["h1", "h2", "h3", "p", "li", "td", "th", "figcaption"]
-          ):
-              text = " ".join(tag.get_text(" ", strip=True).split())
-
-              if (
-                  text
-                  and len(text) <= 1500
-                  and keywords.search(text)
-                  and text not in seen_text
-              ):
-                  text_items.append({
-                      "element": tag.name,
-                      "text": text
-                  })
-                  seen_text.add(text)
-
-          # Record potentially relevant links for further investigation.
-          links = []
-          seen_urls = set()
-
-          for tag in soup.find_all("a", href=True):
-              label = " ".join(tag.get_text(" ", strip=True).split())
-              url = urldefrag(urljoin(response.url, tag["href"]))[0]
-
-              if (
-                  url.startswith(("https://", "http://"))
-                  and (keywords.search(label) or keywords.search(url))
-                  and url not in seen_urls
-              ):
-                  links.append({
-                      "label": label or None,
-                      "url": url
-                  })
-                  seen_urls.add(url)
-
-          # Record relevant image resources, including map images.
-          images = []
-          seen_images = set()
-
-          for tag in soup.find_all("img"):
-              src = tag.get("src") or tag.get("data-src")
-              if not src:
-                  continue
-
-              url = urljoin(response.url, src)
-              alt = tag.get("alt", "").strip()
-
-              if (
-                  keywords.search(alt + " " + url)
-                  and url not in seen_images
-              ):
-                  images.append({
-                      "alt": alt or None,
-                      "url": url
-                  })
-                  seen_images.add(url)
-
-          # List JavaScript files so the actual dynamic data flow
-          # can be investigated separately.
-          scripts = []
-          for tag in soup.find_all("script", src=True):
-              scripts.append(urljoin(response.url, tag["src"]))
+          session = requests.Session()
+          session.headers.update({
+              "User-Agent": "SriLankaWeatherCollector/1.0 (GitHub Actions)"
+          })
 
           result = {
               "source": "Sri Lanka Department of Meteorology",
-              "source_url": source,
-              "fetched_url": response.url,
               "retrieved_at": datetime.now(timezone.utc).isoformat(),
-              "http_status": response.status_code,
-              "page_title": title,
-              "page_description": description,
-              "data_type": "filtered_page_content_not_verified_observations",
+              "status": "unavailable",
               "observations_verified": False,
-              "matching_text": text_items,
-              "relevant_links": links,
-              "relevant_images": images,
-              "javascript_files": scripts
+              "note": (
+                  "This is filtered webpage content, not verified live "
+                  "weather observations. A confirmed data endpoint is needed "
+                  "for reliable numerical weather data."
+              ),
+              "page_url": None,
+              "title": None,
+              "text": [],
+              "links": [],
+              "images": [],
+              "javascript_files": [],
+              "attempts": [],
           }
+
+          for url in SOURCES:
+              try:
+                  response = session.get(
+                      url,
+                      timeout=(10, 20),
+                      allow_redirects=True
+                  )
+                  response.raise_for_status()
+
+                  content_type = response.headers.get("Content-Type", "")
+                  if "html" not in content_type.lower():
+                      raise ValueError(
+                          f"Unexpected content type: {content_type}"
+                      )
+
+                  soup = BeautifulSoup(response.text, "html.parser")
+
+                  # Collect script URLs BEFORE removing scripts.
+                  scripts = []
+                  for tag in soup.find_all("script", src=True):
+                      scripts.append(
+                          urljoin(response.url, tag["src"])
+                      )
+
+                  title = soup.title.get_text(" ", strip=True) if soup.title else None
+
+                  links = []
+                  for tag in soup.find_all("a", href=True):
+                      label = tag.get_text(" ", strip=True)
+                      href = urljoin(response.url, tag["href"])
+                      if urlparse(href).scheme in ("http", "https"):
+                          links.append({
+                              "text": label[:200],
+                              "url": href
+                          })
+
+                  images = []
+                  for tag in soup.find_all("img", src=True):
+                      images.append({
+                          "alt": tag.get("alt", ""),
+                          "url": urljoin(response.url, tag["src"])
+                      })
+
+                  for tag in soup([
+                      "script", "style", "noscript",
+                      "svg", "header", "footer"
+                  ]):
+                      tag.decompose()
+
+                  text = soup.get_text(" ", strip=True)
+                  text = re.sub(r"\s+", " ", text)
+
+                  # Keep relevant weather-related text fragments.
+                  keywords = re.compile(
+                      r"weather|temperature|rain|rainfall|wind|humidity|"
+                      r"forecast|observation|satellite|cloud|visibility|"
+                      r"sunrise|sunset|colombo|sri lanka|district",
+                      re.IGNORECASE
+                  )
+
+                  fragments = re.split(r"(?<=[.!?])\s+", text)
+                  filtered_text = [
+                      fragment[:500]
+                      for fragment in fragments
+                      if keywords.search(fragment)
+                  ]
+
+                  result.update({
+                      "status": "success",
+                      "page_url": response.url,
+                      "title": title,
+                      "text": filtered_text[:200],
+                      "links": links[:300],
+                      "images": images[:100],
+                      "javascript_files": list(dict.fromkeys(scripts))[:100],
+                      "attempts": result["attempts"],
+                  })
+                  break
+
+              except Exception as exc:
+                  result["attempts"].append({
+                      "url": url,
+                      "error": str(exc)[:500]
+                  })
+                  time.sleep(2)
 
           os.makedirs("data", exist_ok=True)
           with open("data/meteo.json", "w", encoding="utf-8") as file:
               json.dump(result, file, ensure_ascii=False, indent=2)
-              file.write("\n")
 
-          print(f"Fetched: {response.url}")
-          print(f"Filtered text items: {len(text_items)}")
-          print(f"Relevant links: {len(links)}")
-          print(f"Relevant images: {len(images)}")
-          print("Wrote data/meteo.json")
+          print("Collector status:", result["status"])
+          print("Saved data/meteo.json")
           PY
 
-      - name: Commit updated JSON
+      - name: Commit JSON if changed
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email \
-            "41898282+github-actions[bot]@users.noreply.github.com"
-
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/meteo.json
-
-          if git diff --cached --quiet; then
-            echo "No JSON changes to commit."
-          else
-            git commit -m "Update meteorology source data"
+          if ! git diff --cached --quiet; then
+            git commit -m "Update collected weather source data"
             git push
+          else
+            echo "No changes to commit."
           fi
