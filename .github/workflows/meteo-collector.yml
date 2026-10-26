@@ -1,492 +1,169 @@
 
-name: Aeris Weather Data Collector
+name: Collect Sri Lanka Weather Observations
 
 on:
   schedule:
-    - cron: "23 0,3,6,9,12,15,18,21 * * *"
+    - cron: "17 */3 * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: aeris-meteo-collector
+  group: meteo-collector
   cancel-in-progress: false
 
 jobs:
   collect:
-    name: Download, convert and publish official observations
     runs-on: ubuntu-latest
-    timeout-minutes: 15
 
     steps:
-      - name: Checkout repository
+      - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          ref: main
-          persist-credentials: true
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
+      - name: Download official weather page
         run: |
-          set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install requests openpyxl
+          curl --fail --silent --show-error --location \
+            --retry 3 \
+            --connect-timeout 20 \
+            --max-time 60 \
+            "https://meteo.gov.lk/" \
+            --output /tmp/meteo-home.html
 
-      - name: Download official workbook
-        env:
-          METEO_URL: "https://meteo.gov.lk/excels/3hourly.xlsx?"
+      - name: Extract and validate observations
         run: |
-          set -euo pipefail
-          mkdir -p .cache
-
-          python - <<'PY'
-          import os
-          import sys
-          import time
-          from pathlib import Path
-
-          import requests
-          from openpyxl import load_workbook
-
-          url = os.environ["METEO_URL"]
-          target = Path(".cache/3hourly.xlsx")
-          temp = target.with_suffix(".download")
-          last_error = None
-
-          for attempt in range(1, 4):
-              try:
-                  print(f"Download attempt {attempt}/3: {url}")
-
-                  with requests.get(
-                      url,
-                      timeout=(15, 60),
-                      headers={
-                          "User-Agent": "AerisWeatherCollector/1.0",
-                          "Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*",
-                      },
-                      allow_redirects=True,
-                      stream=True,
-                  ) as response:
-                      response.raise_for_status()
-                      total = 0
-
-                      with temp.open("wb") as output:
-                          for chunk in response.iter_content(65536):
-                              if chunk:
-                                  output.write(chunk)
-                                  total += len(chunk)
-
-                  if total < 1000:
-                      raise ValueError(
-                          f"Downloaded file is too small: {total} bytes"
-                      )
-
-                  with temp.open("rb") as file:
-                      if file.read(4) != b"PK\x03\x04":
-                          raise ValueError(
-                              "Server response is not a valid XLSX ZIP file"
-                          )
-
-                  workbook = load_workbook(
-                      temp, read_only=True, data_only=True
-                  )
-                  try:
-                      if not workbook.sheetnames:
-                          raise ValueError("Workbook contains no worksheets")
-                      print("Worksheets:", workbook.sheetnames)
-                  finally:
-                      workbook.close()
-
-                  temp.replace(target)
-                  print(f"Verified workbook: {total} bytes")
-                  break
-
-              except Exception as exc:
-                  last_error = exc
-                  temp.unlink(missing_ok=True)
-                  print(f"Attempt {attempt} failed: {exc}", file=sys.stderr)
-
-                  if attempt < 3:
-                      time.sleep(attempt * 5)
-          else:
-              raise SystemExit(
-                  "Official workbook download failed after 3 attempts. "
-                  "No JSON will be published. Last error: "
-                  + str(last_error)
-              )
-          PY
-
-      - name: Convert Excel observations to JSON
-        env:
-          METEO_URL: "https://meteo.gov.lk/excels/3hourly.xlsx?"
-        run: |
-          set -euo pipefail
-
           python - <<'PY'
           import json
           import math
-          import re
-          from datetime import date, datetime, timezone
+          from datetime import datetime, timezone
+          from html.parser import HTMLParser
           from pathlib import Path
 
-          from openpyxl import load_workbook
+          class WeatherParser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.observations = []
 
-          source = Path(".cache/3hourly.xlsx")
-          output = Path("data/meteo.json")
-          temporary = output.with_suffix(".json.tmp")
+              def handle_starttag(self, tag, attrs):
+                  attrs = dict(attrs)
 
-          expected = [
-              "Station_ID",
-              "Station_Name",
-              "Report_Time",
-              "Rainfall (mm)",
-              "Tot RF since 830am",
-              "Temperature ( C )",
-              "RH (%)",
-              "weathertype",
-              "Wind Direction",
-              "Wind Speed(kmh-1)",
-              "Cloud Cover",
-              "MSLP",
-              "Dew Point",
-          ]
+                  if tag != "div":
+                      return
 
-          def norm(value):
-              if value is None:
-                  return ""
-              return re.sub(r"\s+", " ", str(value).strip()).casefold()
+                  if "district-point" not in attrs.get("class", "").split():
+                      return
 
-          def text_value(value):
-              if value is None:
-                  return None
-              result = str(value).strip()
-              return result or None
+                  name = attrs.get("data-name")
+                  raw = attrs.get("data-weather")
 
-          def number(value):
-              if value is None or isinstance(value, bool):
-                  return None, False
+                  if not name or not raw:
+                      return
 
-              if isinstance(value, (int, float)):
-                  if not math.isfinite(value):
-                      return None, False
-                  return value, False
+                  try:
+                      weather = json.loads(raw)
+                  except json.JSONDecodeError:
+                      return
 
-              raw = str(value).strip()
-
-              if not raw or raw.casefold() in {
-                  "na", "n/a", "nan", "null", "-", "--", "nil"
-              }:
-                  return None, False
-
-              if raw.casefold() in {"trace", "tr"}:
-                  return None, True
-
-              try:
-                  result = float(raw.replace(",", ""))
-                  if not math.isfinite(result):
-                      return None, False
-                  return result, False
-              except ValueError:
-                  return None, False
-
-          def timestamp(value):
-              if value is None:
-                  return None
-              if isinstance(value, (datetime, date)):
-                  return value.isoformat()
-              return str(value).strip() or None
-
-          workbook = load_workbook(
-              source, read_only=True, data_only=True
-          )
-
-          try:
-              sheet = None
-              indexes = None
-              header_row = None
-
-              required = {norm(header) for header in expected}
-
-              for candidate in workbook.worksheets:
-                  for row_index, row in enumerate(
-                      candidate.iter_rows(
-                          min_row=1, max_row=20, values_only=True
-                      ),
-                      start=1,
-                  ):
-                      mapping = {
-                          norm(value): index
-                          for index, value in enumerate(row)
-                          if value is not None and str(value).strip()
-                      }
-
-                      if required.issubset(mapping):
-                          sheet = candidate
-                          indexes = mapping
-                          header_row = row_index
-                          break
-
-                  if sheet is not None:
-                      break
-
-              if sheet is None:
-                  raise SystemExit(
-                      "Required Excel columns were not found in the first "
-                      "20 rows. Refusing to publish."
-                  )
-
-              print(f"Worksheet: {sheet.title}; header row: {header_row}")
-
-              def cell(row, name):
-                  index = indexes[norm(name)]
-                  return row[index] if index < len(row) else None
-
-              records = []
-              station_ids = set()
-              skipped = 0
-
-              for row in sheet.iter_rows(
-                  min_row=header_row + 1, values_only=True
-              ):
-                  raw_id = cell(row, "Station_ID")
-                  station_name = text_value(cell(row, "Station_Name"))
-
-                  if raw_id is None and station_name is None:
-                      continue
-
-                  if raw_id is None or station_name is None:
-                      skipped += 1
-                      continue
-
-                  station_id = str(raw_id).strip()
-                  if isinstance(raw_id, float) and raw_id.is_integer():
-                      station_id = str(int(raw_id))
-
-                  if not station_id:
-                      skipped += 1
-                      continue
-
-                  rainfall, rainfall_trace = number(
-                      cell(row, "Rainfall (mm)")
-                  )
-                  total_rainfall, total_trace = number(
-                      cell(row, "Tot RF since 830am")
-                  )
-                  temperature, _ = number(
-                      cell(row, "Temperature ( C )")
-                  )
-                  humidity, _ = number(cell(row, "RH (%)"))
-                  wind_speed, _ = number(
-                      cell(row, "Wind Speed(kmh-1)")
-                  )
-                  pressure, _ = number(cell(row, "MSLP"))
-                  dew_point, _ = number(cell(row, "Dew Point"))
-
-                  if humidity is not None and not 0 <= humidity <= 100:
-                      raise SystemExit(
-                          f"Invalid humidity for station {station_id}"
-                      )
-
-                  if rainfall is not None and rainfall < 0:
-                      raise SystemExit(
-                          f"Negative rainfall for station {station_id}"
-                      )
-
-                  if total_rainfall is not None and total_rainfall < 0:
-                      raise SystemExit(
-                          f"Negative total rainfall for station {station_id}"
-                      )
-
-                  records.append({
-                      "station_id": station_id,
-                      "station_name": station_name,
-                      "report_time": timestamp(
-                          cell(row, "Report_Time")
-                      ),
-                      "rainfall_mm": rainfall,
-                      "rainfall_trace": rainfall_trace,
-                      "total_rainfall_since_0830_mm": total_rainfall,
-                      "total_rainfall_trace": total_trace,
-                      "temperature_c": temperature,
-                      "relative_humidity_pct": humidity,
-                      "weather_type": text_value(
-                          cell(row, "weathertype")
-                      ),
-                      "wind_direction": text_value(
-                          cell(row, "Wind Direction")
-                      ),
-                      "wind_speed_kmh": wind_speed,
-                      "cloud_cover": text_value(
-                          cell(row, "Cloud Cover")
-                      ),
-                      "mean_sea_level_pressure_hpa": pressure,
-                      "dew_point_c": dew_point,
+                  self.observations.append({
+                      "station_name": name.strip(),
+                      "last_updated": weather.get("lastUpdated"),
+                      "rainfall_raw": weather.get("rainfall"),
+                      "total_rainfall_raw": weather.get("totalRainfall"),
+                      "temperature_c": weather.get("temp"),
+                      "relative_humidity_pct": weather.get("rh"),
+                      "weather_type": weather.get("forecast")
                   })
 
-                  station_ids.add(station_id)
+          def number_or_none(value):
+              if value is None:
+                  return None
 
-              if len(records) < 5:
-                  raise SystemExit(
-                      f"Only {len(records)} records found. "
-                      "Refusing to publish potentially incomplete data."
-                  )
+              if str(value).strip().casefold() == "trace":
+                  return None
 
-              payload = {
-                  "metadata": {
-                      "source_url": os.environ["METEO_URL"],
-                      "retrieved_at": datetime.now(
-                          timezone.utc
-                      ).isoformat(),
-                      "record_count": len(records),
-                      "station_count": len(station_ids),
-                      "worksheet": sheet.title,
-                  },
-                  "observations": records,
-              }
+              try:
+                  result = float(value)
+                  return result if math.isfinite(result) else None
+              except (TypeError, ValueError):
+                  return None
 
-              output.parent.mkdir(parents=True, exist_ok=True)
+          html = Path("/tmp/meteo-home.html").read_text(
+              encoding="utf-8"
+          )
 
-              with temporary.open("w", encoding="utf-8") as file:
-                  json.dump(
-                      payload,
-                      file,
-                      indent=2,
-                      ensure_ascii=False,
-                      allow_nan=False,
-                  )
-                  file.write("\n")
+          parser = WeatherParser()
+          parser.feed(html)
 
-              with temporary.open("r", encoding="utf-8") as file:
-                  verified = json.load(file)
+          records = parser.observations
 
-              if len(verified["observations"]) != len(records):
-                  raise SystemExit("Record count validation failed")
+          # Fail safely if the source page changes or returns
+          # an incomplete page. Do not replace existing JSON.
+          if len(records) < 10:
+              raise SystemExit(
+                  f"Only {len(records)} stations found; "
+                  "refusing to publish incomplete data."
+              )
 
-              if verified["metadata"]["record_count"] != len(records):
-                  raise SystemExit("Metadata validation failed")
+          names = [r["station_name"].casefold() for r in records]
+          if len(names) != len(set(names)):
+              raise SystemExit("Duplicate station names detected.")
 
-              temporary.replace(output)
+          for record in records:
+              rainfall = record.pop("rainfall_raw")
+              total_rainfall = record.pop("total_rainfall_raw")
 
-              print(f"Generated {output}")
-              print(f"Observations: {len(records)}")
-              print(f"Unique stations: {len(station_ids)}")
-              print(f"Incomplete rows skipped: {skipped}")
+              record["rainfall_mm"] = number_or_none(rainfall)
+              record["rainfall_trace"] = (
+                  str(rainfall).strip().casefold() == "trace"
+              )
+              record["total_rainfall_since_0830_mm"] = (
+                  number_or_none(total_rainfall)
+              )
+              record["total_rainfall_trace"] = (
+                  str(total_rainfall).strip().casefold() == "trace"
+              )
+              record["temperature_c"] = number_or_none(
+                  record["temperature_c"]
+              )
+              record["relative_humidity_pct"] = number_or_none(
+                  record["relative_humidity_pct"]
+              )
 
-          finally:
-              workbook.close()
-          PY
-
-      - name: Validate JSON output
-        run: |
-          set -euo pipefail
-
-          python - <<'PY'
-          import json
-          import math
-          from pathlib import Path
-
-          path = Path("data/meteo.json")
-
-          if not path.is_file() or path.stat().st_size == 0:
-              raise SystemExit("JSON file is missing or empty")
-
-          with path.open(encoding="utf-8") as file:
-              data = json.load(file)
-
-          if not isinstance(data, dict):
-              raise SystemExit("JSON root must be an object")
-
-          records = data.get("observations")
-          metadata = data.get("metadata")
-
-          if not isinstance(records, list) or len(records) < 5:
-              raise SystemExit("Insufficient station records")
-
-          if not isinstance(metadata, dict):
-              raise SystemExit("Missing metadata")
-
-          fields = {
-              "station_id", "station_name", "report_time",
-              "rainfall_mm", "rainfall_trace",
-              "total_rainfall_since_0830_mm", "total_rainfall_trace",
-              "temperature_c", "relative_humidity_pct", "weather_type",
-              "wind_direction", "wind_speed_kmh", "cloud_cover",
-              "mean_sea_level_pressure_hpa", "dew_point_c",
+          output = {
+              "source": "Sri Lanka Department of Meteorology",
+              "source_url": "https://meteo.gov.lk/",
+              "fetched_at": datetime.now(timezone.utc).isoformat(),
+              "station_count": len(records),
+              "observations": records
           }
 
-          numeric_fields = {
-              "rainfall_mm", "total_rainfall_since_0830_mm",
-              "temperature_c", "relative_humidity_pct",
-              "wind_speed_kmh", "mean_sea_level_pressure_hpa",
-              "dew_point_c",
-          }
+          destination = Path("data/meteo-observations.json")
+          destination.parent.mkdir(parents=True, exist_ok=True)
 
-          for index, record in enumerate(records):
-              if not isinstance(record, dict):
-                  raise SystemExit(f"Record {index} is not an object")
+          temporary = destination.with_suffix(".json.tmp")
+          temporary.write_text(
+              json.dumps(output, indent=2, ensure_ascii=False) + "\n",
+              encoding="utf-8"
+          )
 
-              missing = fields - record.keys()
-              if missing:
-                  raise SystemExit(
-                      f"Record {index} missing fields: {sorted(missing)}"
-                  )
+          # Replace the published file only after successful validation.
+          temporary.replace(destination)
 
-              if not str(record["station_id"]).strip():
-                  raise SystemExit(f"Record {index} has an empty station ID")
-
-              if not isinstance(record["station_name"], str):
-                  raise SystemExit(f"Record {index} has an invalid station name")
-
-              for field in ("rainfall_trace", "total_rainfall_trace"):
-                  if not isinstance(record[field], bool):
-                      raise SystemExit(f"Invalid {field} in record {index}")
-
-              for field in numeric_fields:
-                  value = record[field]
-                  if value is not None:
-                      if isinstance(value, bool) or not isinstance(value, (int, float)):
-                          raise SystemExit(
-                              f"Invalid numeric field {field} in record {index}"
-                          )
-                      if not math.isfinite(value):
-                          raise SystemExit(
-                              f"Non-finite value in {field}, record {index}"
-                          )
-
-          if metadata.get("record_count") != len(records):
-              raise SystemExit("Metadata record count mismatch")
-
-          print(f"Validation passed: {len(records)} observations")
+          print(f"Validated {len(records)} station observations.")
+          print(f"Output: {destination}")
           PY
 
-      - name: Commit and push JSON
+      - name: Commit updated observations
         run: |
-          set -euo pipefail
-
           git config user.name "github-actions[bot]"
           git config user.email \
             "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add -- data/meteo.json
+          git add data/meteo-observations.json
 
           if git diff --cached --quiet; then
-            echo "No changes detected."
-            exit 0
+            echo "No changes to publish."
+          else
+            git commit -m "Update official weather observations"
+            git push
           fi
-
-          git commit -m "chore(data): update official weather observations"
-          git push origin HEAD:main
-
-      - name: Report result
-        if: always()
-        env:
-          JOB_STATUS: ${{ job.status }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          echo "Collector status: ${JOB_STATUS}"
-          echo "Run: ${RUN_URL}"
