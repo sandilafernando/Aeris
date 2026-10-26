@@ -1,5 +1,5 @@
 
-name: Sri Lanka Meteorology Collector
+name: Fetch Sri Lanka Weather Observations
 
 on:
   schedule:
@@ -10,65 +10,206 @@ permissions:
   contents: write
 
 concurrency:
-  group: aeris-meteo-collector
+  group: aeris-weather-collector
   cancel-in-progress: false
 
 jobs:
   collect:
-    # Run on your Ubuntu server in Proxmox.
     runs-on: [self-hosted, linux, x64]
     timeout-minutes: 10
 
     steps:
-      - name: Checkout main branch
+      - name: Checkout Aeris
         uses: actions/checkout@v4
         with:
           ref: main
+          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Install dependencies
-        run: python -m pip install requests openpyxl
-
-      - name: Fetch official meteorological data
+      - name: Fetch and filter official station observations
         env:
-          METEO_URL: 'https://meteo.gov.lk/excels/3hourly.xlsx?'
+          METEO_URL: https://meteo.gov.lk/
           OUTPUT_FILE: data/meteo.json
           MAX_RETRIES: '3'
-        run: python scripts/meteo_collector.py
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import time
+          from datetime import datetime, timezone
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.request import Request, urlopen
 
-      - name: Validate generated JSON
+          URL = os.environ["METEO_URL"]
+          OUTPUT = Path(os.environ["OUTPUT_FILE"])
+          RETRIES = int(os.environ.get("MAX_RETRIES", "3"))
+
+          class StationParser(HTMLParser):
+              def __init__(self):
+                  super().__init__(convert_charrefs=True)
+                  self.stations = []
+
+              def handle_starttag(self, tag, attrs):
+                  if tag.lower() != "div":
+                      return
+
+                  attrs = dict(attrs)
+                  classes = (attrs.get("class") or "").split()
+
+                  if "district-point" not in classes:
+                      return
+
+                  name = (attrs.get("data-name") or "").strip().upper()
+                  raw = attrs.get("data-weather")
+
+                  if not name or not raw:
+                      return
+
+                  try:
+                      weather = json.loads(raw)
+                  except (json.JSONDecodeError, TypeError):
+                      print(f"Skipping {name}: invalid weather JSON")
+                      return
+
+                  if not isinstance(weather, dict):
+                      return
+
+                  # Keep only fields relevant to current station weather.
+                  allowed = {
+                      "lastUpdated",
+                      "rainfall",
+                      "totalRainfall",
+                      "temp",
+                      "rh",
+                      "forecast",
+                  }
+
+                  filtered = {
+                      key: value
+                      for key, value in weather.items()
+                      if key in allowed
+                      and value is not None
+                      and value != ""
+                      and value != "-"
+                  }
+
+                  # Ignore empty station records.
+                  if not any(
+                      key != "lastUpdated" and value is not None
+                      for key, value in filtered.items()
+                  ):
+                      return
+
+                  self.stations.append({
+                      "name": name,
+                      "weather": filtered,
+                  })
+
+          html = None
+          last_error = None
+
+          for attempt in range(1, RETRIES + 1):
+              try:
+                  request = Request(
+                      URL,
+                      headers={
+                          "User-Agent": "AerisWeatherCollector/1.0",
+                          "Accept": "text/html",
+                      },
+                  )
+
+                  with urlopen(request, timeout=25) as response:
+                      if response.status != 200:
+                          raise RuntimeError(
+                              f"HTTP status {response.status}"
+                          )
+                      html = response.read().decode("utf-8", errors="replace")
+
+                  break
+              except Exception as exc:
+                  last_error = exc
+                  print(f"Attempt {attempt}/{RETRIES} failed: {exc}")
+                  if attempt < RETRIES:
+                      time.sleep(attempt * 3)
+
+          if html is None:
+              raise SystemExit(f"Could not fetch official website: {last_error}")
+
+          parser = StationParser()
+          parser.feed(html)
+
+          # Remove duplicate station names, keeping the last record.
+          unique = {}
+          for station in parser.stations:
+              unique[station["name"]] = station
+
+          stations = sorted(unique.values(), key=lambda x: x["name"])
+
+          if not stations:
+              raise SystemExit(
+                  "No valid station observations found. "
+                  "The website HTML format may have changed."
+              )
+
+          result = {
+              "source": URL,
+              "fetchedAt": datetime.now(timezone.utc).isoformat(),
+              "stationCount": len(stations),
+              "stations": stations,
+          }
+
+          OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+          temporary = OUTPUT.with_suffix(".json.tmp")
+          temporary.write_text(
+              json.dumps(result, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          temporary.replace(OUTPUT)
+
+          print(f"Saved {len(stations)} stations to {OUTPUT}")
+          for station in stations:
+              print(f"  {station['name']}")
+          PY
+
+      - name: Validate generated weather data
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
 
           path = Path("data/meteo.json")
-          if not path.is_file() or path.stat().st_size == 0:
-              raise SystemExit("ERROR: Output file is missing or empty")
+          data = json.loads(path.read_text(encoding="utf-8"))
 
-          with path.open(encoding="utf-8") as f:
-              data = json.load(f)
+          if not isinstance(data.get("stations"), list):
+              raise SystemExit("Invalid output: stations must be a list")
 
-          if not data:
-              raise SystemExit("ERROR: JSON contains no data")
+          if not data["stations"]:
+              raise SystemExit("Invalid output: no stations")
 
-          print("JSON validation passed.")
+          if data.get("stationCount") != len(data["stations"]):
+              raise SystemExit("Invalid output: station count mismatch")
+
+          print(
+              f"Validated {len(data['stations'])} weather station records."
+          )
           PY
 
-      - name: Commit and push updated data
+      - name: Commit updated weather data
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add data/meteo.json
 
           if git diff --cached --quiet; then
-            echo "No changes to commit."
+            echo "Weather data has not changed; nothing to commit."
           else
-            git commit -m "Update Sri Lanka meteorological observations"
+            git commit -m "Update official Sri Lanka weather observations"
             git push origin HEAD:main
           fi
