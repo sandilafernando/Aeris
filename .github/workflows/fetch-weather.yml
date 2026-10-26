@@ -1,146 +1,84 @@
 
-name: Fetch Sri Lanka Weather Observations
+name: Diagnose Sri Lanka Meteorology Connectivity
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "17 */6 * * *"
 
 permissions:
-  contents: write
-
-concurrency:
-  group: fetch-weather-observations
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  fetch-weather:
+  diagnose:
+    name: Test Meteorology Server Access
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Download official weather homepage
+      - name: Show runner information
         run: |
-          curl --fail --silent --show-error --location \
-            --connect-timeout 15 --max-time 60 \
-            --retry 2 --retry-delay 3 \
-            "https://meteo.gov.lk/" \
-            --output /tmp/meteo-home.html
+          echo "=== Runner information ==="
+          uname -a
+          echo "UTC time:"
+          date -u
 
-      - name: Extract station observations into JSON
+      - name: Diagnose DNS resolution
         run: |
-          python3 - <<'PY'
-          import json
-          import re
-          from html.parser import HTMLParser
-          from pathlib import Path
+          echo "=== DNS: meteo.gov.lk ==="
+          getent ahosts meteo.gov.lk || true
 
-          class WeatherParser(HTMLParser):
-              def __init__(self):
-                  super().__init__(convert_charrefs=True)
-                  self.stations = []
+          echo
+          echo "=== DNS: weather.meteo.gov.lk ==="
+          getent ahosts weather.meteo.gov.lk || true
 
-              def handle_starttag(self, tag, attrs):
-                  if tag.lower() != "div":
-                      return
-
-                  attrs = dict(attrs)
-                  classes = attrs.get("class", "").split()
-
-                  if "district-point" not in classes:
-                      return
-
-                  name = attrs.get("data-name")
-                  raw_weather = attrs.get("data-weather")
-
-                  if not name or not raw_weather:
-                      return
-
-                  try:
-                      weather = json.loads(raw_weather)
-                  except (json.JSONDecodeError, TypeError):
-                      return
-
-                  def number(value):
-                      if value is None:
-                          return None
-                      if isinstance(value, (int, float)):
-                          return value
-                      if isinstance(value, str) and re.fullmatch(
-                          r"\d+(?:\.\d+)?", value.strip()
-                      ):
-                          return float(value.strip())
-                      return None
-
-                  rainfall = weather.get("rainfall")
-
-                  self.stations.append({
-                      "station_name": name,
-                      "last_updated": weather.get("lastUpdated"),
-                      "rainfall_mm": number(rainfall),
-                      "rainfall_trace": (
-                          isinstance(rainfall, str)
-                          and rainfall.strip().lower() == "trace"
-                      ),
-                      "total_rainfall_mm": number(
-                          weather.get("totalRainfall")
-                      ),
-                      "temperature_c": number(weather.get("temp")),
-                      "relative_humidity_pct": number(weather.get("rh")),
-                      "weather_type": weather.get("forecast"),
-                  })
-
-          html = Path("/tmp/meteo-home.html").read_text(
-              encoding="utf-8", errors="replace"
-          )
-
-          parser = WeatherParser()
-          parser.feed(html)
-
-          if not parser.stations:
-              raise SystemExit(
-                  "No station observations found; refusing to publish empty data."
-              )
-
-          output = Path("data/weather-observations.json")
-          output.parent.mkdir(parents=True, exist_ok=True)
-
-          payload = {
-              "source": "https://meteo.gov.lk/",
-              "station_count": len(parser.stations),
-              "fetched_at_utc": __import__("datetime").datetime.now(
-                  __import__("datetime").timezone.utc
-              ).isoformat(),
-              "observations": parser.stations,
-          }
-
-          output.write_text(
-              json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
-              encoding="utf-8",
-          )
-
-          print(f"Extracted {len(parser.stations)} stations.")
-          print(json.dumps(payload, indent=2, ensure_ascii=False))
-          PY
-
-      - name: Commit updated weather JSON
+      - name: Test HTTPS using hostname
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/weather-observations.json
-          if ! git diff --cached --quiet; then
-            git commit -m "Update weather observations"
-            git push
+          echo "=== HTTPS by hostname ==="
+          curl -v -I \
+            --connect-timeout 20 \
+            --max-time 35 \
+            https://meteo.gov.lk/ || true
+
+      - name: Test HTTPS using known IP
+        run: |
+          echo "=== HTTPS using IP 222.165.186.50 ==="
+          curl -v -I \
+            --connect-timeout 20 \
+            --max-time 35 \
+            --resolve meteo.gov.lk:443:222.165.186.50 \
+            https://meteo.gov.lk/ || true
+
+      - name: Test alternate hostname
+        run: |
+          echo "=== HTTPS: www.meteo.gov.lk ==="
+          curl -v -I \
+            --connect-timeout 15 \
+            --max-time 25 \
+            https://www.meteo.gov.lk/ || true
+
+      - name: Show GitHub runner public IP
+        run: |
+          echo "=== Runner public IP ==="
+          curl -fsS \
+            --connect-timeout 10 \
+            --max-time 15 \
+            https://api.ipify.org || true
+          echo
+
+      - name: Test official weather page download
+        run: |
+          echo "=== Download homepage ==="
+          if curl --fail --silent --show-error --location \
+            --connect-timeout 20 \
+            --max-time 45 \
+            --output /tmp/meteo-home.html \
+            https://meteo.gov.lk/; then
+            echo "Download succeeded."
+            echo "Downloaded bytes:"
+            wc -c < /tmp/meteo-home.html
+            echo "Station entries found:"
+            grep -o 'district-point' /tmp/meteo-home.html | wc -l
           else
-            echo "Weather data unchanged; no commit needed."
+            echo "Download failed."
           fi
-
-      - name: Upload JSON artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: weather-observations
-          path: data/weather-observations.json
-          retention-days: 7
