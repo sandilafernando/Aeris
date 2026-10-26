@@ -72,6 +72,120 @@ function buildObservationsPayload({
   };
 }
 
+function buildMetarObservationsPayload({ observationAgeMinutes = 12 } = {}) {
+  const servedAt = Date.now();
+  const fetchedAt = servedAt - 20_000;
+  const observedAt = fetchedAt - observationAgeMinutes * 60_000;
+  const observationTime = new Date(observedAt).toISOString();
+  const notice =
+    "The Department of Meteorology page could not be reached from this server. Showing official ICAO airport METAR reports from NOAA AWC instead. These are airport stations, not DoM district stations.";
+
+  const stations = [
+    {
+      id: "ratmalana",
+      name: "RATMALANA",
+      locationName: "Colombo Ratmalana Airport",
+      icaoId: "VCCC",
+      wmoId: "43467",
+      observationLabel: "2026-10-26 0000",
+      observationTime,
+      observationEpochMs: observedAt,
+      temperatureC: 28,
+      dewpointC: 26,
+      relativeHumidity: 89,
+      rainfall3hMm: null,
+      rainfallSince0830Mm: null,
+      pressureHpa: 1009,
+      windSpeedKmh: 14.8,
+      windGustKmh: 27.8,
+      windDirection: 220,
+      visibilityLabel: "6+ SM",
+      cloudCover: "FEW",
+      cloudBaseFt: 1600,
+      conditionLabel: "Partly cloudy",
+      conditionKey: "partly",
+      rawObservation: "METAR VCCC 260000Z 22008KT 9999 FEW016 28/26 Q1009",
+      referencePoint: {
+        latitude: 6.822,
+        longitude: 79.886,
+        label: "Airport station coordinates (NOAA AWC)",
+        official: true,
+        elevationM: 6,
+      },
+    },
+    {
+      id: "katunayake",
+      name: "KATUNAYAKE",
+      locationName: "Bandaranaike International Airport",
+      icaoId: "VCBI",
+      wmoId: "43450",
+      observationLabel: "2026-10-26 0000",
+      observationTime,
+      observationEpochMs: observedAt,
+      temperatureC: 28,
+      dewpointC: 27,
+      relativeHumidity: 94,
+      rainfall3hMm: null,
+      rainfallSince0830Mm: null,
+      pressureHpa: 1009,
+      windSpeedKmh: 18.5,
+      windGustKmh: null,
+      windDirection: 220,
+      visibilityLabel: "6+ SM",
+      cloudCover: "BKN",
+      cloudBaseFt: 1600,
+      conditionLabel: "Cloudy",
+      conditionKey: "cloudy",
+      rawObservation: "METAR VCBI 260010Z 22010KT 9999 BKN016 28/27 Q1009",
+      referencePoint: {
+        latitude: 7.181,
+        longitude: 79.884,
+        label: "Airport station coordinates (NOAA AWC)",
+        official: true,
+        elevationM: 10,
+      },
+    },
+  ];
+
+  return {
+    source: {
+      id: "sri-lanka-metar",
+      name: "NOAA Aviation Weather Center — ICAO METAR",
+      shortName: "NOAA AWC METAR",
+      url: "https://aviationweather.gov/data/api/",
+      kind: "official-aviation-observations",
+      title: "Airport Weather Observations (METAR)",
+      timezone: "Asia/Colombo",
+      units: { temperature: "°C", relativeHumidity: "%", pressure: "hPa", wind: "km/h" },
+      conditionNote:
+        "Condition labels are derived from the raw METAR weather group and cloud cover.",
+      referenceNote:
+        "Coordinates are the airport station coordinates published by NOAA AWC. These are airport stations, not Department of Meteorology district stations.",
+      attribution: "NOAA Aviation Weather Center / ICAO METAR",
+    },
+    fetchedAt: new Date(fetchedAt).toISOString(),
+    observationTime,
+    observationTimes: [observationTime],
+    stationCount: stations.length,
+    invalidRecords: 0,
+    staleAfterMinutes: 180,
+    stations,
+    status: "ok",
+    servedAt: new Date(servedAt).toISOString(),
+    cache: "fresh",
+    upstreamStale: false,
+    notice,
+    fallback: {
+      active: true,
+      from: "sri-lanka-dom",
+      to: "sri-lanka-metar",
+      reason: "timeout",
+      notice,
+    },
+    attempts: [{ attempt: 1, status: null, code: "timeout", durationMs: 3000 }],
+  };
+}
+
 function buildEnsemblePayload() {
   const start = Math.floor(Date.now() / 3_600_000) * 3_600_000;
   const time = [];
@@ -235,6 +349,19 @@ export async function mockOpenMeteo(page, options = {}) {
         status: 502,
         contentType: "application/json",
         body: JSON.stringify({ status: "unavailable", error: "Test observation failure" }),
+      });
+      return;
+    }
+
+    if (options.officialSource === "metar") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(
+          buildMetarObservationsPayload({
+            observationAgeMinutes: options.observationAgeMinutes,
+          }),
+        ),
       });
       return;
     }

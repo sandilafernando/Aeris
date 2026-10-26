@@ -1,0 +1,14 @@
+# Aeris is a Next.js 16 App Router application with a server route for official
+# observations. Netlify detects Next.js from package.json and provisions its
+# OpenNext adapter automatically; pinning @netlify/plugin-nextjs is not needed.
+#
+# The real build output is .next (not out/ or dist/). Do not add a static
+# `/* /index.html 200` fallback: that would turn the page route and the
+# /api/weather/sri-lanka-dom JSON route into the same HTML document.
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NEXT_TELEMETRY_DISABLED = "1"

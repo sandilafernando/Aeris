@@ -237,5 +237,8 @@ export function stationReferenceLabel(station) {
   }
   const latitudeLabel = `${Math.abs(latitude).toFixed(2)}°${latitude >= 0 ? "N" : "S"}`;
   const longitudeLabel = `${Math.abs(longitude).toFixed(2)}°${longitude >= 0 ? "E" : "W"}`;
+  if (station.referencePoint.official) {
+    return `Official station point ${latitudeLabel}, ${longitudeLabel}`;
+  }
   return `Approx. reference ${latitudeLabel}, ${longitudeLabel}`;
 }

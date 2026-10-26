@@ -8,11 +8,14 @@ import {
   CloudRain,
   Droplets,
   ExternalLink,
+  Eye,
+  Gauge,
   LoaderCircle,
   MapPin,
   RefreshCw,
   Thermometer,
   Waves,
+  Wind,
 } from "lucide-react";
 import { usePreferences } from "@/components/preferences-provider";
 import StationSelect from "@/components/station-select";
@@ -31,7 +34,7 @@ import {
   selectOfficialStation,
   stationReferenceLabel,
 } from "@/lib/station-selection";
-import { convertTemperature } from "@/lib/weather";
+import { convertTemperature, formatWind, windDirectionLabel } from "@/lib/weather";
 import { cn } from "@/lib/utils";
 
 const COLOMBO_TIME_ZONE = "Asia/Colombo";
@@ -61,6 +64,11 @@ function millimetres(value) {
 function percent(value) {
   if (!Number.isFinite(value)) return "Unavailable";
   return `${formatNumber(value)}%`;
+}
+
+function pressure(value) {
+  if (!Number.isFinite(value)) return "Unavailable";
+  return `${formatNumber(value, { maximumFractionDigits: 0 })} hPa`;
 }
 
 function distanceLabel(distance) {
@@ -94,8 +102,8 @@ function ModelComparisonLoader({ station }) {
   const place = useMemo(() => {
     if (!station?.referencePoint) return null;
     return {
-      id: `dom-reference-${station.id}`,
-      name: `${station.name} reference point`,
+      id: `official-reference-${station.id}`,
+      name: `${station.locationName || station.name} reference point`,
       admin1: "",
       country: "Sri Lanka",
       countryCode: "LK",
@@ -135,7 +143,7 @@ function ModelComparisonLoader({ station }) {
     return (
       <p className="flex items-center gap-2 rounded-xl bg-surface-container/55 px-3 py-2.5 text-xs text-muted-foreground">
         <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
-        Loading the model value at the approximate reference point…
+        Loading the model value at the reference point…
       </p>
     );
   }
@@ -206,8 +214,8 @@ function ModelComparisonLoader({ station }) {
               observationGapMinutes / 60,
             )} hours apart, so part of any difference is timing. `
           : ""}
-        Rainfall is not compared: the official field is a 3-hour accumulation, while the model
-        endpoint returns a different time basis.
+        Rainfall is not compared: the official accumulation windows and the model endpoint do
+        not share a time basis.
       </p>
     </div>
   );
@@ -273,9 +281,15 @@ export default function OfficialObservations({
   stationId = "auto",
   onStationChange,
 }) {
-  const { temperatureUnit } = usePreferences();
+  const { temperatureUnit, windUnit } = usePreferences();
   const { status, data, error, refresh } = official;
   const stations = data?.stations || [];
+  const sourceId = data?.source?.id || null;
+  const isMetar =
+    sourceId === "sri-lanka-metar" ||
+    data?.source?.kind === "official-aviation-observations";
+  const sourceLabel = isMetar ? "NOAA AWC METAR" : "Sri Lanka DoM";
+  const sourceLinkLabel = isMetar ? "NOAA" : "DoM";
   const referenceNow =
     Number.isFinite(now) && now > 0
       ? now
@@ -306,6 +320,18 @@ export default function OfficialObservations({
   const failed = status === "error" && !data;
   const stationDistance = distanceLabel(selection.distanceKm);
   const manualMissing = selection.manualMissing;
+  const windValue = formatWind(selected?.windSpeedKmh, windUnit);
+  const windSupporting =
+    selected && Number.isFinite(selected.windDirection)
+      ? `${windDirectionLabel(selected.windDirection, true)}${
+          Number.isFinite(selected.windGustKmh)
+            ? ` · gusts ${formatWind(selected.windGustKmh, windUnit)}`
+            : ""
+        }`
+      : null;
+  const referenceNote = isMetar
+    ? "These are airport station coordinates published by NOAA AWC. They are not Department of Meteorology district stations, and they are not approximate city-centre points."
+    : `${data?.source?.referenceNote || "Approximate city-centre reference points are not official station coordinates."} The DoM page inspected by Aeris does not publish station coordinates, so distance and automatic selection are approximate.`;
 
   return (
     <section
@@ -322,7 +348,7 @@ export default function OfficialObservations({
         <div className="min-w-0">
           <p className="eyebrow flex items-center gap-1.5">
             <MapPin aria-hidden="true" className="size-3" />
-            Official observation · Sri Lanka DoM
+            Official observation · {sourceLabel}
           </p>
           <h2
             id="official-observations-heading"
@@ -339,7 +365,7 @@ export default function OfficialObservations({
               rel="noreferrer noopener"
               className="inline-flex min-h-10 items-center gap-1 rounded-full px-2.5 text-[0.68rem] font-semibold text-primary transition-colors hover:bg-primary-container"
             >
-              DoM
+              {sourceLinkLabel}
               <ExternalLink aria-hidden="true" className="size-3" />
               <span className="sr-only">(opens in a new tab)</span>
             </a>
@@ -391,7 +417,7 @@ export default function OfficialObservations({
         <div className="relative mt-3" role="status" aria-live="polite">
           <p className="flex items-center gap-2 text-xs text-muted-foreground">
             <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
-            Loading the Department of Meteorology station page…
+            Loading official station observations…
           </p>
           <div className="mt-3 grid grid-cols-3 gap-2" aria-hidden="true">
             {[0, 1, 2].map((item) => (
@@ -485,6 +511,11 @@ export default function OfficialObservations({
                   {selected.name}
                 </p>
                 <p className="mt-0.5 text-[0.66rem] leading-4 text-muted-foreground">
+                  {isMetar && selected.locationName
+                    ? `${selected.locationName}${
+                        selected.icaoId ? ` (${selected.icaoId})` : ""
+                      } · `
+                    : ""}
                   {stationDistance && activeLocation
                     ? `${stationDistance} from ${activeLocation.name} · `
                     : ""}
@@ -518,7 +549,11 @@ export default function OfficialObservations({
                 ) : (
                   <CheckCircle2 aria-hidden="true" className="size-3" />
                 )}
-                {selectedStale ? "Station data delayed" : "Official reading"}
+                {selectedStale
+                  ? "Station data delayed"
+                  : isMetar
+                    ? "Official airport report"
+                    : "Official reading"}
               </span>
               <span
                 className="text-[0.68rem] font-semibold"
@@ -547,30 +582,76 @@ export default function OfficialObservations({
               ) : null}
             </p>
 
-            <dl className="mt-3 grid grid-cols-3 gap-1.5">
-              <Metric
-                icon={Droplets}
-                label="Humidity"
-                value={percent(selected.relativeHumidity)}
-              />
-              <Metric
-                icon={CloudRain}
-                label="Rain, 3 h"
-                value={millimetres(selected.rainfall3hMm)}
-              />
-              <Metric
-                icon={Waves}
-                label="Since 08:30"
-                value={millimetres(selected.rainfallSince0830Mm)}
-              />
-            </dl>
+            {isMetar ? (
+              <dl className="mt-3 grid grid-cols-2 gap-1.5">
+                <Metric
+                  icon={Droplets}
+                  label="Humidity"
+                  value={percent(selected.relativeHumidity)}
+                />
+                <Metric
+                  icon={Wind}
+                  label="Wind"
+                  value={windValue}
+                  supporting={windSupporting}
+                />
+                <Metric
+                  icon={Gauge}
+                  label="Pressure"
+                  value={pressure(selected.pressureHpa)}
+                />
+                <Metric
+                  icon={Eye}
+                  label="Visibility"
+                  value={selected.visibilityLabel || "Unavailable"}
+                  supporting={selected.visibilityLabel ? "as reported" : null}
+                />
+              </dl>
+            ) : (
+              <dl className="mt-3 grid grid-cols-3 gap-1.5">
+                <Metric
+                  icon={Droplets}
+                  label="Humidity"
+                  value={percent(selected.relativeHumidity)}
+                />
+                <Metric
+                  icon={CloudRain}
+                  label="Rain, 3 h"
+                  value={millimetres(selected.rainfall3hMm)}
+                />
+                <Metric
+                  icon={Waves}
+                  label="Since 08:30"
+                  value={millimetres(selected.rainfallSince0830Mm)}
+                />
+              </dl>
+            )}
             <p className="mt-2 text-[0.62rem] leading-4 text-muted-foreground">
-              Temperature and rainfall are official DoM values, separate from the Open-Meteo
-              forecast. A blank measurement means unavailable; 0.0 mm is a reported zero.
+              {isMetar
+                ? "Temperature, humidity, wind, pressure, and visibility are official values from the airport METAR report. METAR does not carry a rainfall total, so Aeris leaves rainfall unavailable rather than showing zero."
+                : "Temperature and rainfall are official DoM values, separate from the Open-Meteo forecast. A blank measurement means unavailable; 0.0 mm is a reported zero."}
             </p>
           </div>
 
           <ModelComparison station={selected} />
+
+          {isMetar && selected.rawObservation ? (
+            <details className="mt-3 rounded-xl border border-outline-variant/70 px-3 py-2.5 text-[0.66rem] leading-4">
+              <summary className="flex min-h-7 cursor-pointer items-center justify-between gap-2 font-semibold">
+                Raw METAR report
+                <span className="text-[0.62rem] font-normal text-muted-foreground">
+                  {selected.icaoId}
+                </span>
+              </summary>
+              <p className="mt-2 break-words rounded-lg bg-surface-container/55 px-2.5 py-2 font-mono text-[0.62rem] leading-5 text-muted-foreground">
+                {selected.rawObservation}
+              </p>
+              <p className="mt-2 text-[0.62rem] leading-4 text-muted-foreground">
+                The report as transmitted by the airport station. Aeris decodes the fields above
+                and does not alter the raw report.
+              </p>
+            </details>
+          ) : null}
 
           <details className="group mt-auto rounded-xl border border-outline-variant/70 px-3 py-2.5 text-[0.66rem] leading-4">
             <summary className="flex min-h-7 cursor-pointer items-center justify-between gap-2 font-semibold">
@@ -584,12 +665,7 @@ export default function OfficialObservations({
             </summary>
             <div className="mt-2 space-y-1.5 border-t border-outline-variant pt-2 text-muted-foreground">
               <p>{selectionExplanation(selection)}</p>
-              <p>
-                {data?.source?.referenceNote ||
-                  "Approximate city-centre reference points are not official station coordinates."}{" "}
-                The DoM page inspected by Aeris does not publish station coordinates, so
-                distance and automatic selection are approximate.
-              </p>
+              <p>{referenceNote}</p>
             </div>
           </details>
         </div>
@@ -603,15 +679,17 @@ export default function OfficialObservations({
           </p>
           <p className="mt-1 text-muted-foreground">
             Automatic station selection is designed for Sri Lankan locations. Choose a station
-            above to see the latest official DoM observation here.
+            above to see the latest official observation here.
           </p>
         </div>
       ) : null}
 
       {data?.stationCount ? (
         <p className="relative mt-2.5 text-[0.62rem] leading-4 text-muted-foreground">
-          {data.stationCount} official station record{data.stationCount === 1 ? "" : "s"} in this
-          response. Times shown in Sri Lanka Standard Time.
+          {data.stationCount} official {isMetar ? "airport " : ""}station record
+          {data.stationCount === 1 ? "" : "s"} in this response
+          {isMetar ? " from NOAA AWC METAR" : " from Sri Lanka DoM"}. Times shown in Sri Lanka
+          Standard Time.
         </p>
       ) : null}
     </section>

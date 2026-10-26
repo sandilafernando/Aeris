@@ -1,6 +1,10 @@
 import * as cheerio from "cheerio";
 
 export const SRI_LANKA_DOM_URL = "https://meteo.gov.lk/";
+export const SRI_LANKA_DOM_URLS = Object.freeze([
+  SRI_LANKA_DOM_URL,
+  "https://www.meteo.gov.lk/",
+]);
 export const SRI_LANKA_OBSERVATION_STALE_MINUTES = 6 * 60;
 
 const SRI_LANKA_OFFSET_MINUTES = 330;
@@ -52,10 +56,11 @@ const CONDITION_RULES = [
 ];
 
 export class OfficialSourceError extends Error {
-  constructor(message, code = "source") {
+  constructor(message, code = "source", details = null) {
     super(message);
     this.name = "OfficialSourceError";
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -234,33 +239,163 @@ export function normalizeSriLankaHtml(html, { fetchedAt = Date.now() } = {}) {
   };
 }
 
-export async function fetchSriLankaObservations({ timeoutMs = 20_000 } = {}) {
-  let response;
+function urlLabel(value) {
   try {
-    response = await fetch(SRI_LANKA_DOM_URL, {
-      signal: AbortSignal.timeout(timeoutMs),
-      headers: {
-        Accept: "text/html,application/xhtml+xml",
-        "User-Agent": "AerisWeather/1.0 (+official-observation-check)",
-      },
-      cache: "no-store",
-    });
-  } catch (error) {
-    throw new OfficialSourceError(
-      error?.name === "TimeoutError"
-        ? "The Department of Meteorology page timed out."
-        : "The Department of Meteorology page could not be reached.",
+    const url = new URL(value);
+    return `${url.protocol}//${url.host}${url.pathname}`;
+  } catch {
+    return "invalid-url";
+  }
+}
+
+/**
+ * Fetch the public DoM station page, trying the published hosts in order.
+ *
+ * The host is intermittently unreachable from public cloud regions. Every
+ * attempt is bounded and reported in a safe diagnostic list so the route can
+ * distinguish a timeout from a parser change without exposing a stack trace.
+ */
+export async function fetchSriLankaObservations({
+  timeoutMs = 20_000,
+  urls = SRI_LANKA_DOM_URLS,
+  attemptsPerUrl = 1,
+  retryDelayMs = 200,
+  fetchImpl = fetch,
+  now = () => Date.now(),
+} = {}) {
+  const currentTime = typeof now === "function" ? now : () => now;
+  const targets = [...new Set((Array.isArray(urls) ? urls : SRI_LANKA_DOM_URLS).filter(Boolean))];
+  const attempts = [];
+  let lastError = null;
+
+  for (const target of targets) {
+    for (let attempt = 1; attempt <= attemptsPerUrl; attempt += 1) {
+      const startedAt = currentTime();
+      let response;
+
+      try {
+        response = await fetchImpl(target, {
+          signal: AbortSignal.timeout(timeoutMs),
+          headers: {
+            Accept: "text/html,application/xhtml+xml",
+            "User-Agent":
+              "Aeris/1.0 (+https://github.com/sandilafernando/Aeris; official-observation-check)",
+            "Cache-Control": "no-store",
+          },
+          cache: "no-store",
+        });
+      } catch (error) {
+        const timedOut = error?.name === "TimeoutError" || error?.name === "AbortError";
+        attempts.push({
+          url: urlLabel(target),
+          attempt,
+          status: null,
+          code: timedOut ? "timeout" : "network",
+          durationMs: Math.max(0, currentTime() - startedAt),
+        });
+        lastError = new OfficialSourceError(
+          timedOut
+            ? "The Department of Meteorology site did not respond in time."
+            : "The Department of Meteorology site could not be reached.",
+          timedOut ? "timeout" : "network",
+          { attempts: [...attempts], cause: error?.name || "network" },
+        );
+        if (retryDelayMs > 0 && attempt < attemptsPerUrl) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+        }
+        continue;
+      }
+
+      const durationMs = Math.max(0, currentTime() - startedAt);
+      if (!response.ok) {
+        const retryable = response.status === 429 || response.status >= 500;
+        attempts.push({
+          url: urlLabel(target),
+          attempt,
+          status: response.status,
+          code: "http",
+          durationMs,
+        });
+        lastError = new OfficialSourceError(
+          `The Department of Meteorology site returned HTTP ${response.status}.`,
+          "http",
+          { status: response.status, attempts: [...attempts] },
+        );
+        if (!retryable) break;
+        if (retryDelayMs > 0 && attempt < attemptsPerUrl) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+        }
+        continue;
+      }
+
+      let html;
+      try {
+        html = await response.text();
+      } catch {
+        attempts.push({
+          url: urlLabel(target),
+          attempt,
+          status: response.status,
+          code: "response",
+          durationMs,
+        });
+        lastError = new OfficialSourceError(
+          "The Department of Meteorology page returned an unreadable response.",
+          "response",
+          { attempts: [...attempts] },
+        );
+        break;
+      }
+
+      if (!html || html.trim().length === 0) {
+        attempts.push({
+          url: urlLabel(target),
+          attempt,
+          status: response.status,
+          code: "empty-response",
+          durationMs,
+        });
+        lastError = new OfficialSourceError(
+          "The Department of Meteorology page returned no data.",
+          "empty-response",
+          { attempts: [...attempts] },
+        );
+        break;
+      }
+
+      attempts.push({
+        url: urlLabel(target),
+        attempt,
+        status: response.status,
+        code: "ok",
+        durationMs,
+      });
+
+      try {
+        return {
+          ...normalizeSriLankaHtml(html, { fetchedAt: currentTime() }),
+          retrieval: {
+            url: urlLabel(target),
+            attempts,
+            receivedBytes: html.length,
+          },
+        };
+      } catch (error) {
+        throw new OfficialSourceError(
+          error?.message || "The Department of Meteorology station page could not be read.",
+          error?.code || "parse",
+          { attempts: [...attempts] },
+        );
+      }
+    }
+  }
+
+  throw (
+    lastError ||
+    new OfficialSourceError(
+      "The Department of Meteorology site could not be reached.",
       "network",
-    );
-  }
-
-  if (!response.ok) {
-    throw new OfficialSourceError(
-      `The Department of Meteorology page returned HTTP ${response.status}.`,
-      "http",
-    );
-  }
-
-  const html = await response.text();
-  return normalizeSriLankaHtml(html, { fetchedAt: Date.now() });
+      { attempts },
+    )
+  );
 }

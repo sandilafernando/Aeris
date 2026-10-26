@@ -184,3 +184,31 @@ test("an observation failure is shown honestly and can be retried", async ({ pag
   await expect.poll(() => state.officialObservationRequests).toBe(2);
   expect(state.officialObservationFailures).toBe(1);
 });
+
+test("an unreachable DoM page falls back to clearly labelled NOAA AWC airport METAR", async ({
+  page,
+}) => {
+  await seedPlaces(page, [COLOMBO]);
+  await mockOpenMeteo(page, { officialSource: "metar", observationAgeMinutes: 12 });
+  await page.goto("/");
+
+  await expect(page.getByTestId("weather-dashboard")).toBeVisible();
+  const card = page.getByTestId("official-observations");
+  await expect(card).toContainText("Official observation · NOAA AWC METAR");
+  await expect(card).toContainText(/not DoM district stations/i);
+  await expect(card.getByTestId("official-station-name")).toHaveText("RATMALANA");
+  await expect(card.getByText("Official airport report")).toBeVisible();
+  await expect(card).toContainText("Colombo Ratmalana Airport (VCCC)");
+  await expect(card).toContainText("Official station point");
+  await expect(card.getByText("Pressure", { exact: true })).toBeVisible();
+  await expect(card.getByText("Visibility", { exact: true })).toBeVisible();
+  await expect(card.getByText("Rain, 3 h")).toHaveCount(0);
+  await expect(card.getByText("Since 08:30")).toHaveCount(0);
+  await expect(card).toContainText("METAR does not carry a rainfall total");
+
+  await card.getByText("Raw METAR report").click();
+  await expect(card).toContainText("METAR VCCC 260000Z 22008KT 9999 FEW016 28/26 Q1009");
+
+  const sourceLink = card.getByRole("link", { name: /NOAA/i });
+  await expect(sourceLink).toHaveAttribute("href", "https://aviationweather.gov/data/api/");
+});

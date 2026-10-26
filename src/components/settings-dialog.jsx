@@ -64,6 +64,14 @@ export default function SettingsDialog({
   } = usePreferences();
 
   const stations = official?.data?.stations || [];
+  const stationSource = official?.data?.source || null;
+  const usingMetar =
+    stationSource?.id === "sri-lanka-metar" ||
+    stationSource?.kind === "official-aviation-observations";
+  const stationLabel = usingMetar ? "NOAA AWC airport station" : "Sri Lanka DoM station";
+  const stationReference = usingMetar
+    ? "These are official airport station coordinates published by NOAA AWC, not Department of Meteorology district stations."
+    : "Automatic selection uses approximate city-centre reference points, not official station coordinates, because the DoM page does not publish them.";
   const stationLoading = official?.status === "loading" && !official?.data;
   const stationError = official?.status === "error" && !official?.data;
   const manualMissing =
@@ -162,7 +170,7 @@ export default function SettingsDialog({
             <div className="space-y-3 rounded-2xl border border-outline-variant bg-surface-container/55 p-3.5">
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <MapPin aria-hidden="true" className="size-4 text-muted-foreground" />
-                <label htmlFor="settings-station-select">Sri Lanka DoM station</label>
+                <label htmlFor="settings-station-select">{stationLabel}</label>
               </div>
               <StationSelect
                 id="settings-station-select"
@@ -217,8 +225,7 @@ export default function SettingsDialog({
               ) : null}
 
               <p className="text-[0.66rem] leading-4 text-muted-foreground">
-                Automatic selection uses approximate city-centre reference points, not official
-                station coordinates, because the DoM page does not publish them.
+                {stationReference}
               </p>
             </div>
           </section>
@@ -289,9 +296,11 @@ export default function SettingsDialog({
               <p className="flex gap-2.5">
                 <Database aria-hidden="true" className="mt-1 size-4 shrink-0 text-primary" />
                 <span>
-                  Official 3-hourly station observations come from the Department of
-                  Meteorology, Sri Lanka, fetched through Aeris&apos;s own route handler. They
-                  are shown separately from the Open-Meteo forecast.
+                  Official station observations come from the Department of Meteorology, Sri
+                  Lanka when its public page is reachable. If it is not, Aeris shows official
+                  ICAO airport METAR reports from NOAA AWC and labels them as airport stations,
+                  not DoM district stations. Both are fetched through Aeris&apos;s own route
+                  handler and shown separately from the Open-Meteo forecast.
                 </span>
               </p>
               {onOpenSources ? (

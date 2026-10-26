@@ -52,11 +52,20 @@ const SOURCES = [
   },
   {
     name: "Sri Lanka Department of Meteorology",
-    role: "Official 3-hourly station observations",
+    role: "Primary official 3-hourly station observations",
     url: "https://meteo.gov.lk/",
     detail:
-      "Parsed server-side from the public station page. The station coordinates are not published there, so model comparisons use approximate city-centre reference points created by Aeris.",
+      "Parsed server-side from the public station page. The station coordinates are not published there, so model comparisons use approximate city-centre reference points created by Aeris. If this host is unreachable from the deployment region, Aeris labels the fallback below instead of pretending the data came from DoM.",
     badge: "Official",
+    tone: "official",
+  },
+  {
+    name: "NOAA Aviation Weather Center",
+    role: "Official ICAO airport METAR fallback",
+    url: "https://aviationweather.gov/data/api/",
+    detail:
+      "Official airport weather reports from Sri Lankan ICAO stations. Used only when the DoM page cannot be reached. These are airport stations, not DoM district stations, and METAR does not include a rainfall total.",
+    badge: "Fallback",
     tone: "official",
   },
   {
@@ -164,8 +173,10 @@ export default function SourcesDialog({ open, onOpenChange, onCloseAutoFocus }) 
             <p className="mt-1.5 text-[0.68rem] leading-5 text-muted-foreground">
               Open-Meteo data is used under CC BY 4.0. Place search uses GeoNames data.
               Official station observations remain attributed to the Department of
-              Meteorology, Sri Lanka, with a link to the original page. Aeris is an independent
-              project, not affiliated with Google or the Department of Meteorology.
+              Meteorology, Sri Lanka, with a link to the original page. NOAA AWC METAR reports
+              are attributed separately when they are used as the fallback. Aeris is an
+              independent project, not affiliated with Google, the Department of Meteorology,
+              or NOAA.
             </p>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[0.68rem] font-semibold">
               <a
@@ -184,6 +195,15 @@ export default function SourcesDialog({ open, onOpenChange, onCloseAutoFocus }) 
                 className="inline-flex min-h-8 items-center gap-1 text-primary underline decoration-outline-variant underline-offset-4"
               >
                 Department of Meteorology
+                <ExternalLink aria-hidden="true" className="size-3" />
+              </a>
+              <a
+                href="https://aviationweather.gov/data/api/"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex min-h-8 items-center gap-1 text-primary underline decoration-outline-variant underline-offset-4"
+              >
+                NOAA AWC
                 <ExternalLink aria-hidden="true" className="size-3" />
               </a>
             </div>
