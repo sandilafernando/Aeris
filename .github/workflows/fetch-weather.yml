@@ -1,84 +1,74 @@
 
-name: Diagnose Sri Lanka Meteorology Connectivity
+name: Sri Lanka Meteorology Collector
 
 on:
-  workflow_dispatch:
   schedule:
-    - cron: "17 */6 * * *"
+    - cron: '23 0,3,6,9,12,15,18,21 * * *'
+  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: aeris-meteo-collector
+  cancel-in-progress: false
 
 jobs:
-  diagnose:
-    name: Test Meteorology Server Access
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+  collect:
+    # Run on your Ubuntu server in Proxmox.
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 10
 
     steps:
-      - name: Show runner information
-        run: |
-          echo "=== Runner information ==="
-          uname -a
-          echo "UTC time:"
-          date -u
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
 
-      - name: Diagnose DNS resolution
-        run: |
-          echo "=== DNS: meteo.gov.lk ==="
-          getent ahosts meteo.gov.lk || true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-          echo
-          echo "=== DNS: weather.meteo.gov.lk ==="
-          getent ahosts weather.meteo.gov.lk || true
+      - name: Install dependencies
+        run: python -m pip install requests openpyxl
 
-      - name: Test HTTPS using hostname
-        run: |
-          echo "=== HTTPS by hostname ==="
-          curl -v -I \
-            --connect-timeout 20 \
-            --max-time 35 \
-            https://meteo.gov.lk/ || true
+      - name: Fetch official meteorological data
+        env:
+          METEO_URL: 'https://meteo.gov.lk/excels/3hourly.xlsx?'
+          OUTPUT_FILE: data/meteo.json
+          MAX_RETRIES: '3'
+        run: python scripts/meteo_collector.py
 
-      - name: Test HTTPS using known IP
+      - name: Validate generated JSON
         run: |
-          echo "=== HTTPS using IP 222.165.186.50 ==="
-          curl -v -I \
-            --connect-timeout 20 \
-            --max-time 35 \
-            --resolve meteo.gov.lk:443:222.165.186.50 \
-            https://meteo.gov.lk/ || true
+          python - <<'PY'
+          import json
+          from pathlib import Path
 
-      - name: Test alternate hostname
-        run: |
-          echo "=== HTTPS: www.meteo.gov.lk ==="
-          curl -v -I \
-            --connect-timeout 15 \
-            --max-time 25 \
-            https://www.meteo.gov.lk/ || true
+          path = Path("data/meteo.json")
+          if not path.is_file() or path.stat().st_size == 0:
+              raise SystemExit("ERROR: Output file is missing or empty")
 
-      - name: Show GitHub runner public IP
-        run: |
-          echo "=== Runner public IP ==="
-          curl -fsS \
-            --connect-timeout 10 \
-            --max-time 15 \
-            https://api.ipify.org || true
-          echo
+          with path.open(encoding="utf-8") as f:
+              data = json.load(f)
 
-      - name: Test official weather page download
+          if not data:
+              raise SystemExit("ERROR: JSON contains no data")
+
+          print("JSON validation passed.")
+          PY
+
+      - name: Commit and push updated data
         run: |
-          echo "=== Download homepage ==="
-          if curl --fail --silent --show-error --location \
-            --connect-timeout 20 \
-            --max-time 45 \
-            --output /tmp/meteo-home.html \
-            https://meteo.gov.lk/; then
-            echo "Download succeeded."
-            echo "Downloaded bytes:"
-            wc -c < /tmp/meteo-home.html
-            echo "Station entries found:"
-            grep -o 'district-point' /tmp/meteo-home.html | wc -l
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add data/meteo.json
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
           else
-            echo "Download failed."
+            git commit -m "Update Sri Lanka meteorological observations"
+            git push origin HEAD:main
           fi
