@@ -1,0 +1,27 @@
+{
+  "source": "Sri Lanka Department of Meteorology",
+  "retrieved_at": "2026-10-26T13:48:13.624667+00:00",
+  "status": "unavailable",
+  "observations_verified": false,
+  "note": "This is filtered webpage content, not verified live weather observations. A confirmed data endpoint is needed for reliable numerical weather data.",
+  "page_url": null,
+  "title": null,
+  "text": [],
+  "links": [],
+  "images": [],
+  "javascript_files": [],
+  "attempts": [
+    {
+      "url": "https://www.meteo.gov.lk/index.php?lang=en",
+      "error": "HTTPSConnectionPool(host='www.meteo.gov.lk', port=443): Max retries exceeded with url: /index.php?lang=en (Caused by ConnectTimeoutError(<HTTPSConnection(host='www.meteo.gov.lk', port=443) at 0x75a027d1f4d0>, 'Connection to www.meteo.gov.lk timed out. (connect timeout=10)'))"
+    },
+    {
+      "url": "https://meteo.gov.lk/",
+      "error": "HTTPSConnectionPool(host='meteo.gov.lk', port=443): Max retries exceeded with url: / (Caused by ConnectTimeoutError(<HTTPSConnection(host='meteo.gov.lk', port=443) at 0x75a026788260>, 'Connection to meteo.gov.lk timed out. (connect timeout=10)'))"
+    },
+    {
+      "url": "https://meteo.gov.lk/qris/",
+      "error": "HTTPSConnectionPool(host='meteo.gov.lk', port=443): Max retries exceeded with url: /qris/ (Caused by ConnectTimeoutError(<HTTPSConnection(host='meteo.gov.lk', port=443) at 0x75a0267888c0>, 'Connection to meteo.gov.lk timed out. (connect timeout=10)'))"
+    }
+  ]
+}
