@@ -1,0 +1,22 @@
+
+name: Weather Data Collector
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 * * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Test workflow
+        run: |
+          echo "GitHub Actions is running."
+          echo "Next step: connect the verified official weather data source."
