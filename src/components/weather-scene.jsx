@@ -289,6 +289,55 @@ const CLOUD_PRESETS = {
       opacity: 0.3,
     },
   ],
+  rain: [
+    {
+      top: "10%",
+      left: "-16%",
+      width: "58%",
+      drift: "3.2rem",
+      duration: "34s",
+      delay: "-7s",
+      opacity: 0.44,
+    },
+    {
+      top: "42%",
+      right: "-14%",
+      width: "54%",
+      drift: "-2.8rem",
+      duration: "42s",
+      delay: "-21s",
+      opacity: 0.36,
+    },
+  ],
+  storm: [
+    {
+      top: "6%",
+      left: "-18%",
+      width: "64%",
+      drift: "3.6rem",
+      duration: "30s",
+      delay: "-5s",
+      opacity: 0.52,
+    },
+    {
+      top: "36%",
+      right: "-16%",
+      width: "60%",
+      drift: "-3.2rem",
+      duration: "38s",
+      delay: "-17s",
+      opacity: 0.44,
+    },
+    {
+      top: "68%",
+      left: "-6%",
+      width: "44%",
+      drift: "2.4rem",
+      duration: "34s",
+      delay: "-11s",
+      opacity: 0.3,
+    },
+  ],
 };
 
 const FOG_BANDS = [
@@ -459,7 +508,12 @@ export default function WeatherScene({
 }) {
   const { reducedEffects } = usePreferences();
   const condition = CONDITION_GROUPS.has(group) ? group : "partly";
-  const showClouds = condition === "partly" || condition === "cloudy" || condition === "fog";
+  const showClouds =
+    condition === "partly" ||
+    condition === "cloudy" ||
+    condition === "fog" ||
+    condition === "rain" ||
+    condition === "storm";
   const showRain = condition === "rain" || condition === "storm";
   const showSnow = condition === "snow";
   const showRays = condition === "clear" && isDay;
@@ -480,6 +534,7 @@ export default function WeatherScene({
         <Orbs group={condition} />
         {showClouds ? <Clouds group={condition} /> : null}
         {condition === "fog" ? <FogBands /> : null}
+        {condition === "storm" ? <span className={styles.lightningFlash} /> : null}
         {showRays ? <span className={styles.rays} /> : null}
         {showStars ? <Stars /> : null}
         {showRain ? <RainField heavy={condition === "storm"} /> : null}

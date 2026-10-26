@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
+  Bell,
+  BellOff,
   Database,
   ExternalLink,
   LoaderCircle,
@@ -56,12 +59,62 @@ export default function SettingsDialog({
     windUnit,
     reducedEffects,
     stationId,
+    weatherNotifications,
     setTheme,
     setTemperatureUnit,
     setWindUnit,
     setReducedEffects,
     setStationId,
+    setWeatherNotifications,
   } = usePreferences();
+  const [notificationPermission, setNotificationPermission] = useState("unknown");
+
+  /* eslint-disable react-hooks/set-state-in-effect -- Notification.permission only exists in the browser and must be read after hydration. */
+  useEffect(() => {
+    if (!open) return;
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setNotificationPermission("unsupported");
+      return;
+    }
+    setNotificationPermission(window.Notification.permission);
+  }, [open]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const notificationsSupported = notificationPermission !== "unsupported";
+  const notificationsBlocked =
+    notificationPermission === "denied" || notificationPermission === "unsupported";
+  const notificationsActive =
+    weatherNotifications && notificationPermission === "granted";
+
+  const handleNotificationsChange = async (checked) => {
+    if (!checked) {
+      setWeatherNotifications(false);
+      return;
+    }
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setNotificationPermission("unsupported");
+      setWeatherNotifications(false);
+      return;
+    }
+    if (window.Notification.permission === "denied") {
+      setNotificationPermission("denied");
+      setWeatherNotifications(false);
+      return;
+    }
+    if (window.Notification.permission === "granted") {
+      setNotificationPermission("granted");
+      setWeatherNotifications(true);
+      return;
+    }
+    try {
+      const permission = await window.Notification.requestPermission();
+      setNotificationPermission(permission);
+      setWeatherNotifications(permission === "granted");
+    } catch {
+      setNotificationPermission("denied");
+      setWeatherNotifications(false);
+    }
+  };
 
   const stations = official?.data?.stations || [];
   const stationSource = official?.data?.source || null;
@@ -71,9 +124,10 @@ export default function SettingsDialog({
   const stationLabel = usingMetar ? "NOAA AWC airport station" : "Sri Lanka DoM station";
   const stationReference = usingMetar
     ? "These are official airport station coordinates published by NOAA AWC, not Department of Meteorology district stations."
-    : "Automatic selection uses approximate city-centre reference points, not official station coordinates, because the DoM page does not publish them.";
+    : "Automatic selection uses approximate city-centre reference points, not official station coordinates, because the Department's published feeds do not include coordinates.";
   const stationLoading = official?.status === "loading" && !official?.data;
   const stationError = official?.status === "error" && !official?.data;
+  const stationStale = official?.status === "stale" && Boolean(official?.data);
   const manualMissing =
     stationId !== AUTOMATIC_STATION_ID &&
     stations.length > 0 &&
@@ -203,7 +257,12 @@ export default function SettingsDialog({
               {stationError ? (
                 <div className="rounded-xl bg-card/70 px-3 py-2.5 text-[0.7rem] leading-5">
                   <p className="font-semibold">Station list unavailable</p>
-                  <p className="mt-0.5 text-muted-foreground">{official?.error}</p>
+                  <p className="mt-0.5 text-muted-foreground">
+                    The official source did not respond.
+                    {official?.retryInSeconds > 0
+                      ? ` Retrying in ${official.retryInSeconds}s.`
+                      : ""}
+                  </p>
                   <button
                     type="button"
                     onClick={official?.refresh}
@@ -214,12 +273,18 @@ export default function SettingsDialog({
                 </div>
               ) : null}
 
+              {stationStale ? (
+                <p className="rounded-xl bg-tertiary-container/60 px-3 py-2 text-[0.7rem] leading-5 text-on-tertiary-container">
+                  Showing the last successful station list. It is not a live response.
+                </p>
+              ) : null}
+
               {manualMissing ? (
                 <div className="rounded-xl bg-tertiary-container/65 px-3 py-2.5 text-[0.7rem] leading-5 text-on-tertiary-container">
                   <p className="font-semibold">Saved station unavailable</p>
                   <p className="mt-0.5 opacity-90">
-                    That station is not in the current official response. Your manual choice
-                    has not been changed; choose another station above or Automatic.
+                    That station is not in the current response. Your manual choice has not been
+                    changed; choose another station above or Automatic.
                   </p>
                 </div>
               ) : null}
@@ -262,6 +327,71 @@ export default function SettingsDialog({
             </div>
           </section>
 
+          <section aria-labelledby="notifications-heading">
+            <h2
+              id="notifications-heading"
+              className="mb-2.5 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground"
+            >
+              Weather alerts
+            </h2>
+            <div className="space-y-3 rounded-2xl border border-outline-variant bg-surface-container/55 p-3.5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <label
+                    htmlFor="weather-notifications"
+                    className="flex items-center gap-2 text-sm font-semibold"
+                  >
+                    {notificationsActive ? (
+                      <Bell aria-hidden="true" className="size-4 text-muted-foreground" />
+                    ) : (
+                      <BellOff aria-hidden="true" className="size-4 text-muted-foreground" />
+                    )}
+                    Rain and storm notifications
+                  </label>
+                  <p id="weather-notifications-help" className="mt-1 text-[0.7rem] leading-5 text-muted-foreground">
+                    While Aeris is open, show a browser notification when the Open-Meteo
+                    forecast expects rain, snow, or storms within the next few hours. Alerts
+                    are generated in this tab, saved only in this browser, and are not push
+                    notifications.
+                  </p>
+                </div>
+                <Switch
+                  id="weather-notifications"
+                  checked={notificationsActive}
+                  onCheckedChange={handleNotificationsChange}
+                  disabled={notificationsBlocked || notificationPermission === "unknown"}
+                  aria-describedby="weather-notifications-help weather-notifications-status"
+                  className="mt-0.5"
+                />
+              </div>
+
+              <p
+                id="weather-notifications-status"
+                role="status"
+                aria-live="polite"
+                className="rounded-xl bg-card/70 px-3 py-2 text-[0.68rem] leading-5 text-muted-foreground"
+              >
+                {notificationPermission === "unsupported"
+                  ? "This browser does not support notifications. The forecast remains available."
+                  : notificationPermission === "denied"
+                    ? "Notifications are blocked for Aeris. Allow them in your browser's site settings, then reopen this panel."
+                    : notificationPermission === "granted" && weatherNotifications
+                      ? "Notifications are on for this browser. Closing the tab stops them."
+                      : notificationPermission === "granted"
+                        ? "Browser permission is already granted. Turn this on to receive local alerts."
+                        : notificationPermission === "unknown"
+                          ? "Checking notification support…"
+                          : "Aeris will ask your browser for permission when you turn this on."}
+              </p>
+              {notificationsSupported && notificationPermission !== "denied" ? (
+                <p className="text-[0.66rem] leading-4 text-muted-foreground">
+                  Nothing is sent to a server, and no alert is generated while the tab is
+                  closed or the device is asleep.
+                </p>
+              ) : null}
+            </div>
+          </section>
+
           <section aria-labelledby="privacy-heading">
             <h2
               id="privacy-heading"
@@ -297,10 +427,11 @@ export default function SettingsDialog({
                 <Database aria-hidden="true" className="mt-1 size-4 shrink-0 text-primary" />
                 <span>
                   Official station observations come from the Department of Meteorology, Sri
-                  Lanka when its public page is reachable. If it is not, Aeris shows official
-                  ICAO airport METAR reports from NOAA AWC and labels them as airport stations,
-                  not DoM district stations. Both are fetched through Aeris&apos;s own route
-                  handler and shown separately from the Open-Meteo forecast.
+                  Lanka. Aeris reads the Department&apos;s 3-hourly station workbook first and
+                  its public map page second; both are DoM data. If neither can be reached, Aeris
+                  shows official ICAO airport METAR reports from NOAA AWC and labels them as
+                  airport stations, not DoM district stations. Both paths use Aeris&apos;s own
+                  route handler and are shown separately from the Open-Meteo forecast.
                 </span>
               </p>
               {onOpenSources ? (

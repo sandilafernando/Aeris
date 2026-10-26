@@ -11,6 +11,7 @@ import HourlyForecast from "@/components/hourly-forecast";
 import LocationDialog from "@/components/location-dialog";
 import OfficialObservations from "@/components/official-observations";
 import Onboarding from "@/components/onboarding";
+import SatelliteCard from "@/components/satellite-card";
 import SettingsDialog from "@/components/settings-dialog";
 import SiteFooter from "@/components/site-footer";
 import SourcesDialog from "@/components/sources-dialog";
@@ -22,6 +23,7 @@ import { usePreferences } from "@/components/preferences-provider";
 import { useNow, useOnlineStatus } from "@/hooks/use-environment";
 import { useSriLankaObservations } from "@/hooks/use-official-source";
 import { useWeather } from "@/hooks/use-weather";
+import { useWeatherNotifications } from "@/hooks/use-weather-notifications";
 import { formatTime, relativeUpdateLabel } from "@/lib/format";
 import {
   normalizePlace,
@@ -43,7 +45,8 @@ function findSavedMatch(saved, place) {
 }
 
 export default function WeatherApp() {
-  const { resolvedTheme, reducedEffects, stationId, setStationId } = usePreferences();
+  const { resolvedTheme, reducedEffects, stationId, setStationId, weatherNotifications } =
+    usePreferences();
   const systemReduceMotion = useReducedMotion();
   const reduceMotion = systemReduceMotion || reducedEffects;
   const clock = useNow(30_000);
@@ -95,6 +98,7 @@ export default function WeatherApp() {
   const weather = useWeather(activeLocation);
   const official = useSriLankaObservations({
     enabled: storageReady && (Boolean(activeLocation) || settingsOpen),
+    online,
   });
   const refreshWeather = weather.refresh;
   const now =
@@ -104,6 +108,13 @@ export default function WeatherApp() {
     0;
   const paletteGroup = weather.data?.current?.condition?.group || "partly";
   const paletteDay = weather.data?.current?.isDay ?? true;
+
+  useWeatherNotifications({
+    enabled: weatherNotifications,
+    data: weather.data,
+    location: activeLocation,
+    now,
+  });
 
   useEffect(() => {
     const palette = resolvePalette(paletteGroup, paletteDay, resolvedTheme);
@@ -363,6 +374,7 @@ export default function WeatherApp() {
                 now={now}
                 stationId={stationId}
                 onStationChange={setStationId}
+                online={online}
               />
             </div>
 
@@ -376,6 +388,10 @@ export default function WeatherApp() {
 
             <div className="min-w-0 scroll-reveal lg:col-span-6">
               <Atmosphere current={weather.data.current} />
+            </div>
+
+            <div className="min-w-0 scroll-reveal lg:col-span-12">
+              <SatelliteCard location={activeLocation} />
             </div>
 
             <div className="min-w-0 scroll-reveal lg:col-span-12">

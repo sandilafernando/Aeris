@@ -8,6 +8,7 @@ export const DEFAULT_PREFERENCES = Object.freeze({
   windUnit: "kmh",
   reducedEffects: false,
   stationId: "auto",
+  weatherNotifications: false,
 });
 
 const THEMES = new Set(["light", "dark", "system"]);
@@ -54,6 +55,10 @@ export function normalizePreferences(value) {
         ? value.reducedEffects
         : DEFAULT_PREFERENCES.reducedEffects,
     stationId: normalizeStationPreference(value.stationId),
+    weatherNotifications:
+      typeof value.weatherNotifications === "boolean"
+        ? value.weatherNotifications
+        : DEFAULT_PREFERENCES.weatherNotifications,
   };
 }
 

@@ -137,6 +137,31 @@
   animation-delay: var(--band-delay, 0s);
 }
 
+.root[data-group="storm"] .cloud {
+  background: color-mix(in oklab, var(--scene-detail) 34%, transparent);
+  filter: blur(12px);
+}
+
+.root[data-group="rain"] .cloud {
+  background: color-mix(in oklab, var(--scene-detail) 22%, transparent);
+  filter: blur(11px);
+}
+
+.lightningFlash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at 68% 18%,
+    color-mix(in oklab, var(--scene-cloud) 92%, transparent),
+    color-mix(in oklab, var(--scene-cloud) 28%, transparent) 26%,
+    transparent 58%
+  );
+  mix-blend-mode: screen;
+  opacity: 0;
+  animation: lightningFlash 11s ease-out infinite;
+  animation-delay: -3.5s;
+}
+
 /* Rain and snow ---------------------------------------------------------- */
 
 .rainLayer,
@@ -323,6 +348,33 @@
   }
 }
 
+@keyframes lightningFlash {
+  0%,
+  82%,
+  100% {
+    opacity: 0;
+  }
+  83% {
+    opacity: 0.72;
+  }
+  84% {
+    opacity: 0.08;
+  }
+  85% {
+    opacity: 0.52;
+  }
+  87%,
+  92% {
+    opacity: 0;
+  }
+  93% {
+    opacity: 0.22;
+  }
+  94% {
+    opacity: 0;
+  }
+}
+
 /* Reduced motion: freeze the atmosphere and hide falling particles. ------ */
 
 @media (prefers-reduced-motion: reduce) {
@@ -332,7 +384,8 @@
   .rainDrop,
   .snowflake,
   .star,
-  .rays {
+  .rays,
+  .lightningFlash {
     animation: none !important;
   }
 
@@ -356,13 +409,15 @@
 .reduced .snowflake,
 .reduced .star,
 .reduced .rays,
+.reduced .lightningFlash,
 [data-effects="reduced"] .orb,
 [data-effects="reduced"] .cloud,
 [data-effects="reduced"] .fogBand,
 [data-effects="reduced"] .rainDrop,
 [data-effects="reduced"] .snowflake,
 [data-effects="reduced"] .star,
-[data-effects="reduced"] .rays {
+[data-effects="reduced"] .rays,
+[data-effects="reduced"] .lightningFlash {
   animation: none !important;
 }
 

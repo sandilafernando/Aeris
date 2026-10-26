@@ -1,4 +1,9 @@
 import * as cheerio from "cheerio";
+import {
+  DOM_WORKBOOK_MAX_BYTES,
+  SRI_LANKA_DOM_WORKBOOK_URL,
+  parseDomWorkbook,
+} from "./dom-workbook.js";
 
 export const SRI_LANKA_DOM_URL = "https://meteo.gov.lk/";
 export const SRI_LANKA_DOM_URLS = Object.freeze([
@@ -6,8 +11,55 @@ export const SRI_LANKA_DOM_URLS = Object.freeze([
   "https://www.meteo.gov.lk/",
 ]);
 export const SRI_LANKA_OBSERVATION_STALE_MINUTES = 6 * 60;
+export { SRI_LANKA_DOM_WORKBOOK_URL };
+
+// The DoM host is frequently slow from outside Sri Lanka (measured 6-19 s).
+// A short timeout was the reason the production route silently fell back to
+// METAR even though the official feed was available.
+export const DEFAULT_DOM_TIMEOUT_MS = 25_000;
+export const DOM_WORKBOOK_GRACE_TIMEOUT_MS = 20_000;
 
 const SRI_LANKA_OFFSET_MINUTES = 330;
+
+const WIND_COMPASS_DEGREES = Object.freeze({
+  N: 0,
+  NNE: 22.5,
+  NE: 45,
+  ENE: 67.5,
+  E: 90,
+  ESE: 112.5,
+  SE: 135,
+  SSE: 157.5,
+  S: 180,
+  SSW: 202.5,
+  SW: 225,
+  WSW: 247.5,
+  W: 270,
+  WNW: 292.5,
+  NW: 315,
+  NNW: 337.5,
+  CALM: null,
+});
+
+const EXACT_CONDITION_KEYS = Object.freeze({
+  fairday: "clear",
+  fairnight: "clear",
+  partlycloudy: "partly",
+  partlycloudynight: "partly",
+  hazenight: "fog",
+  fognight: "fog",
+  thunderstormsnight: "storm",
+  thundershowers: "storm",
+  lightning: "storm",
+  smoke: "fog",
+  haze: "fog",
+  mist: "fog",
+  fog: "fog",
+  drizzling: "rain",
+  rain: "rain",
+  showers: "rain",
+  cloudy: "cloudy",
+});
 
 /**
  * Approximate city-centre points used only to request a comparable
@@ -75,6 +127,8 @@ export function slugifyStationName(name) {
 export function conditionKeyForLabel(label) {
   const text = String(label || "").trim();
   if (!text) return "unknown";
+  const exact = EXACT_CONDITION_KEYS[text.toLowerCase().replace(/[^a-z]/g, "")];
+  if (exact) return exact;
   for (const [key, pattern] of CONDITION_RULES) {
     if (pattern.test(text)) return key;
   }
@@ -91,7 +145,7 @@ export function parseNumericValue(value) {
 }
 
 export function parseObservationTimestamp(label) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2})(\d{2})$/.exec(
+  const match = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):?(\d{2})$/.exec(
     String(label || "").trim(),
   );
   if (!match) return null;
@@ -104,9 +158,25 @@ export function parseObservationTimestamp(label) {
   if (dayNumber < 1 || dayNumber > 31) return null;
   if (hourNumber > 23 || minuteNumber > 59) return null;
 
-  const utcMs =
-    Date.UTC(Number(year), monthIndex, dayNumber, hourNumber, minuteNumber) -
-    SRI_LANKA_OFFSET_MINUTES * 60 * 1000;
+  const localAsUtc = Date.UTC(
+    Number(year),
+    monthIndex,
+    dayNumber,
+    hourNumber,
+    minuteNumber,
+  );
+  const calendarDate = new Date(localAsUtc);
+  // Reject impossible dates such as 2026-02-30 instead of silently rolling
+  // into the next month.
+  if (
+    calendarDate.getUTCFullYear() !== Number(year) ||
+    calendarDate.getUTCMonth() !== monthIndex ||
+    calendarDate.getUTCDate() !== dayNumber
+  ) {
+    return null;
+  }
+
+  const utcMs = localAsUtc - SRI_LANKA_OFFSET_MINUTES * 60 * 1000;
   const date = new Date(utcMs);
   if (Number.isNaN(date.getTime())) return null;
   return {
@@ -239,6 +309,177 @@ export function normalizeSriLankaHtml(html, { fetchedAt = Date.now() } = {}) {
   };
 }
 
+export function compassToDegrees(compass) {
+  const key = String(compass || "").trim().toUpperCase();
+  if (!Object.hasOwn(WIND_COMPASS_DEGREES, key)) return null;
+  return WIND_COMPASS_DEGREES[key];
+}
+
+/**
+ * Normalize one row from the Department's workbook. Unlike the map page, the
+ * workbook publishes the WMO station identifier and the full observation set.
+ * The workbook still does not publish coordinates, so distance selection keeps
+ * using the clearly labelled reference point.
+ */
+export function normalizeWorkbookStationRecord(record) {
+  const stationName = String(record?.stationName || "").trim();
+  const stationId = String(record?.stationId || "").trim();
+  if (!stationName || !/^\d{3,6}$/.test(stationId)) return null;
+
+  const observation = parseObservationTimestamp(record?.reportTime);
+  const conditionLabel =
+    typeof record?.weatherType === "string" ? record.weatherType.trim().slice(0, 80) : "";
+  const reference = STATION_REFERENCE_POINTS[stationName] || null;
+  const compass =
+    typeof record?.windDirection === "string" && record.windDirection.trim()
+      ? record.windDirection.trim().toUpperCase()
+      : null;
+
+  return {
+    id: slugifyStationName(stationName),
+    stationId,
+    name: stationName,
+    observationLabel:
+      typeof record?.reportTime === "string" ? record.reportTime.trim() : "",
+    observationTime: observation?.iso || null,
+    observationEpochMs: observation?.epochMs ?? null,
+    temperatureC: parseNumericValue(record?.temperatureC),
+    relativeHumidity: parseNumericValue(record?.relativeHumidity),
+    rainfall3hMm: parseNumericValue(record?.rainfall3hMm),
+    rainfallSince0830Mm: parseNumericValue(record?.rainfallSince0830Mm),
+    dewPointC: parseNumericValue(record?.dewPointC),
+    pressureHpa: parseNumericValue(record?.pressureHpa),
+    windSpeedKmh: parseNumericValue(record?.windSpeedKmh),
+    windDirection: compassToDegrees(compass),
+    windDirectionCompass: compass,
+    windGustKmh: null,
+    cloudCoverOktas: parseNumericValue(record?.cloudCoverOktas),
+    conditionLabel: conditionLabel || null,
+    conditionKey: conditionKeyForLabel(conditionLabel),
+    referencePoint: reference
+      ? {
+          latitude: reference.latitude,
+          longitude: reference.longitude,
+          label: "Approximate city-centre reference",
+          official: false,
+        }
+      : null,
+  };
+}
+
+function latestObservationTime(stations) {
+  const observationCounts = new Map();
+  for (const station of stations) {
+    if (!station.observationTime) continue;
+    observationCounts.set(
+      station.observationTime,
+      (observationCounts.get(station.observationTime) || 0) + 1,
+    );
+  }
+  return {
+    latest:
+      [...observationCounts.entries()].sort(
+        (a, b) => Date.parse(b[0]) - Date.parse(a[0]),
+      )[0]?.[0] || null,
+    times: [...observationCounts.keys()].sort(
+      (a, b) => Date.parse(b) - Date.parse(a),
+    ),
+  };
+}
+
+export function normalizeSriLankaWorkbook(
+  workbookBuffer,
+  { fetchedAt = Date.now(), retrieval = null } = {},
+) {
+  let parsed;
+  try {
+    parsed = parseDomWorkbook(workbookBuffer);
+  } catch (error) {
+    throw new OfficialSourceError(
+      error?.message || "The Department of Meteorology workbook could not be read.",
+      error?.code || "workbook-parse",
+    );
+  }
+
+  const stationsById = new Map();
+  let invalidRecords = parsed.invalidRows;
+  for (const record of parsed.rows) {
+    const station = normalizeWorkbookStationRecord(record);
+    if (!station) {
+      invalidRecords += 1;
+      continue;
+    }
+    if (stationsById.has(station.stationId)) {
+      invalidRecords += 1;
+      continue;
+    }
+    stationsById.set(station.stationId, station);
+  }
+
+  const stations = [...stationsById.values()].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  if (stations.length === 0) {
+    throw new OfficialSourceError(
+      "Station records were present in the official workbook but none could be read.",
+      "unreadable-stations",
+    );
+  }
+
+  const observationTimes = latestObservationTime(stations);
+
+  return {
+    source: {
+      id: "sri-lanka-dom",
+      name: "Department of Meteorology, Sri Lanka",
+      shortName: "Sri Lanka DoM",
+      url: SRI_LANKA_DOM_URL,
+      feedUrl: SRI_LANKA_DOM_WORKBOOK_URL,
+      kind: "official-observations",
+      product: "3-hourly station workbook (XLSX)",
+      title: "Weather Observations (3 Hourly)",
+      timezone: "Asia/Colombo",
+      stationIdentifiers: true,
+      units: {
+        temperature: "°C",
+        relativeHumidity: "%",
+        rainfall3h: "mm",
+        rainfallSince0830: "mm",
+        windSpeed: "km/h",
+        pressure: "hPa",
+        cloudCover: "oktas",
+        dewPoint: "°C",
+      },
+      windows: {
+        rainfall3h: "Rainfall during the previous 3 hours",
+        rainfallSince0830: "Rainfall since 08:30 Sri Lanka time",
+      },
+      conditionNote:
+        "The source labels this field “weathertype”; Aeris shows it as the reported condition, not a forecast.",
+      referenceNote: SRI_LANKA_REFERENCE_NOTE,
+    },
+    fetchedAt: new Date(fetchedAt).toISOString(),
+    observationTime: observationTimes.latest,
+    observationTimes: observationTimes.times,
+    stationCount: stations.length,
+    invalidRecords,
+    stations,
+    retrieval: retrieval
+      ? {
+          ...retrieval,
+          format: "xlsx",
+          sheetName: parsed.sheetName,
+          rowCount: parsed.rowCount,
+          receivedBytes: workbookBuffer?.byteLength ?? workbookBuffer?.length ?? null,
+        }
+      : {
+          format: "xlsx",
+          sheetName: parsed.sheetName,
+          rowCount: parsed.rowCount,
+        },
+  };
+}
+
 function urlLabel(value) {
   try {
     const url = new URL(value);
@@ -246,6 +487,15 @@ function urlLabel(value) {
   } catch {
     return "invalid-url";
   }
+}
+
+function combineSignals(timeoutMs, externalSignal) {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  if (!externalSignal) return timeoutSignal;
+  if (typeof AbortSignal.any === "function") {
+    return AbortSignal.any([externalSignal, timeoutSignal]);
+  }
+  return timeoutSignal;
 }
 
 /**
@@ -256,12 +506,13 @@ function urlLabel(value) {
  * distinguish a timeout from a parser change without exposing a stack trace.
  */
 export async function fetchSriLankaObservations({
-  timeoutMs = 20_000,
+  timeoutMs = DEFAULT_DOM_TIMEOUT_MS,
   urls = SRI_LANKA_DOM_URLS,
   attemptsPerUrl = 1,
   retryDelayMs = 200,
   fetchImpl = fetch,
   now = () => Date.now(),
+  signal: externalSignal = null,
 } = {}) {
   const currentTime = typeof now === "function" ? now : () => now;
   const targets = [...new Set((Array.isArray(urls) ? urls : SRI_LANKA_DOM_URLS).filter(Boolean))];
@@ -275,7 +526,7 @@ export async function fetchSriLankaObservations({
 
       try {
         response = await fetchImpl(target, {
-          signal: AbortSignal.timeout(timeoutMs),
+          signal: combineSignals(timeoutMs, externalSignal),
           headers: {
             Accept: "text/html,application/xhtml+xml",
             "User-Agent":
@@ -398,4 +649,256 @@ export async function fetchSriLankaObservations({
       { attempts },
     )
   );
+}
+
+/**
+ * Fetch the official 3-hourly workbook. This is the primary DoM integration
+ * because it is the Department's own data feed and includes station IDs,
+ * wind, pressure, cloud cover, and dew point that the map page omits.
+ */
+export async function fetchSriLankaWorkbookObservations({
+  workbookUrl = SRI_LANKA_DOM_WORKBOOK_URL,
+  timeoutMs = DOM_WORKBOOK_GRACE_TIMEOUT_MS,
+  fetchImpl = fetch,
+  now = () => Date.now(),
+  signal: externalSignal = null,
+  attempts: priorAttempts = [],
+} = {}) {
+  const currentTime = typeof now === "function" ? now : () => now;
+  const target = String(workbookUrl || "").trim();
+  if (!target || !/^https:\/\//i.test(target)) {
+    throw new OfficialSourceError(
+      "The Department of Meteorology workbook URL is invalid.",
+      "invalid-url",
+      { attempts: [...priorAttempts] },
+    );
+  }
+
+  const attempts = [...priorAttempts];
+  const startedAt = currentTime();
+  let response;
+  try {
+    response = await fetchImpl(target, {
+      signal: combineSignals(timeoutMs, externalSignal),
+      headers: {
+        Accept:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream,*/*;q=0.5",
+        "User-Agent":
+          "Aeris/1.0 (+https://github.com/sandilafernando/Aeris; official-observation-check)",
+        "Cache-Control": "no-store",
+      },
+      cache: "no-store",
+    });
+  } catch (error) {
+    const timedOut = error?.name === "TimeoutError" || error?.name === "AbortError";
+    attempts.push({
+      url: target,
+      attempt: 1,
+      status: null,
+      code: timedOut ? "timeout" : "network",
+      durationMs: Math.max(0, currentTime() - startedAt),
+    });
+    throw new OfficialSourceError(
+      timedOut
+        ? "The Department of Meteorology workbook did not respond in time."
+        : "The Department of Meteorology workbook could not be reached.",
+      timedOut ? "timeout" : "network",
+      { attempts, cause: error?.name || "network" },
+    );
+  }
+
+  const durationMs = Math.max(0, currentTime() - startedAt);
+  if (!response.ok) {
+    attempts.push({
+      url: target,
+      attempt: 1,
+      status: response.status,
+      code: "http",
+      durationMs,
+    });
+    throw new OfficialSourceError(
+      `The Department of Meteorology workbook returned HTTP ${response.status}.`,
+      "http",
+      { status: response.status, attempts },
+    );
+  }
+
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > DOM_WORKBOOK_MAX_BYTES) {
+    attempts.push({
+      url: target,
+      attempt: 1,
+      status: response.status,
+      code: "too-large",
+      durationMs,
+    });
+    throw new OfficialSourceError(
+      "The Department of Meteorology workbook is larger than expected.",
+      "too-large",
+      { attempts },
+    );
+  }
+
+  let buffer;
+  try {
+    const bytes = await response.arrayBuffer();
+    buffer = Buffer.from(bytes);
+  } catch {
+    attempts.push({
+      url: target,
+      attempt: 1,
+      status: response.status,
+      code: "response",
+      durationMs,
+    });
+    throw new OfficialSourceError(
+      "The Department of Meteorology workbook returned an unreadable response.",
+      "response",
+      { attempts },
+    );
+  }
+
+  if (buffer.length === 0) {
+    attempts.push({
+      url: target,
+      attempt: 1,
+      status: response.status,
+      code: "empty-response",
+      durationMs,
+    });
+    throw new OfficialSourceError(
+      "The Department of Meteorology workbook returned no data.",
+      "empty-response",
+      { attempts },
+    );
+  }
+  if (buffer[0] !== 0x50 || buffer[1] !== 0x4b) {
+    attempts.push({
+      url: target,
+      attempt: 1,
+      status: response.status,
+      code: "not-xlsx",
+      durationMs,
+    });
+    throw new OfficialSourceError(
+      "The Department of Meteorology workbook response was not a valid XLSX file.",
+      "not-xlsx",
+      { attempts },
+    );
+  }
+
+  attempts.push({
+    url: target,
+    attempt: 1,
+    status: response.status,
+    code: "ok",
+    durationMs,
+  });
+
+  try {
+    const normalized = normalizeSriLankaWorkbook(buffer, {
+      fetchedAt: currentTime(),
+      retrieval: {
+        url: target,
+        attempts,
+        receivedBytes: buffer.length,
+      },
+    });
+    return {
+      ...normalized,
+      retrieval: {
+        ...normalized.retrieval,
+        attempts,
+      },
+    };
+  } catch (error) {
+    throw new OfficialSourceError(
+      error?.message || "The Department of Meteorology workbook could not be read.",
+      error?.code || "workbook-parse",
+      { attempts },
+    );
+  }
+}
+
+/**
+ * Load official DoM observations with the richer workbook first. If the
+ * workbook is blocked, malformed, or temporarily unavailable, the map page is
+ * still tried as a labelled secondary representation of the same official
+ * source. NOAA AWC METAR remains a separate fallback in
+ * `official-observations.js`.
+ */
+export async function fetchSriLankaOfficialFeed({
+  workbookUrl = SRI_LANKA_DOM_WORKBOOK_URL,
+  urls = SRI_LANKA_DOM_URLS,
+  workbookTimeoutMs = DOM_WORKBOOK_GRACE_TIMEOUT_MS,
+  htmlTimeoutMs = 12_000,
+  fetchImpl = fetch,
+  now = () => Date.now(),
+} = {}) {
+  const currentTime = typeof now === "function" ? now : () => now;
+  const attempts = [];
+
+  try {
+    const workbook = await fetchSriLankaWorkbookObservations({
+      workbookUrl,
+      timeoutMs: workbookTimeoutMs,
+      fetchImpl,
+      now: currentTime,
+    });
+    return {
+      ...workbook,
+      retrieval: {
+        ...workbook.retrieval,
+        representation: "workbook",
+        attempts: workbook.retrieval?.attempts || [],
+      },
+    };
+  } catch (workbookError) {
+    attempts.push(...(workbookError?.details?.attempts || []));
+    const workbookDiagnostic = {
+      code: workbookError?.code || "workbook",
+      message:
+        typeof workbookError?.message === "string"
+          ? workbookError.message.slice(0, 240)
+          : "The official workbook could not be read.",
+    };
+
+    try {
+      const html = await fetchSriLankaObservations({
+        timeoutMs: htmlTimeoutMs,
+        urls,
+        attemptsPerUrl: 1,
+        fetchImpl,
+        now: currentTime,
+      });
+      return {
+        ...html,
+        retrieval: {
+          ...html.retrieval,
+          representation: "map-page",
+          attempts: [...attempts, ...(html.retrieval?.attempts || [])],
+          workbookError: workbookDiagnostic,
+        },
+        notice:
+          "The Department of Meteorology 3-hourly workbook could not be read, so Aeris used the official map page. The map page omits station IDs, wind, pressure, cloud cover, and dew point.",
+      };
+    } catch (htmlError) {
+      const htmlDiagnostic = {
+        code: htmlError?.code || "html",
+        message:
+          typeof htmlError?.message === "string"
+            ? htmlError.message.slice(0, 240)
+            : "The official map page could not be read.",
+      };
+      throw new OfficialSourceError(
+        "The Department of Meteorology workbook and map page could not be reached.",
+        "dom-unavailable",
+        {
+          attempts: [...attempts, ...(htmlError?.details?.attempts || [])],
+          workbookError: workbookDiagnostic,
+          htmlError: htmlDiagnostic,
+        },
+      );
+    }
+  }
 }

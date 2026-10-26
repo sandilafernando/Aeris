@@ -3,6 +3,7 @@ import {
   SRI_LANKA_DOM_URLS,
   SRI_LANKA_OBSERVATION_STALE_MINUTES,
   fetchSriLankaObservations,
+  fetchSriLankaOfficialFeed,
 } from "./sri-lanka-dom.js";
 import {
   METAR_OBSERVATION_STALE_MINUTES,
@@ -11,13 +12,17 @@ import {
 } from "./metar.js";
 
 export const OFFICIAL_FALLBACK_NOTICE =
-  "The Department of Meteorology page could not be reached from this server. Showing official ICAO airport METAR reports from NOAA AWC instead. These are airport stations, not DoM district stations.";
+  "The Department of Meteorology source could not be reached from this server. Showing official ICAO airport METAR reports from NOAA AWC instead. These are airport stations, not DoM district stations.";
 
 export const OFFICIAL_FALLBACK_DISABLED_NOTICE =
   "The Department of Meteorology source is disabled by configuration. Showing official ICAO airport METAR reports from NOAA AWC instead. These are airport stations, not DoM district stations.";
 
-export const DEFAULT_DOM_TIMEOUT_MS = 4_000;
-export const SERVERLESS_DOM_TIMEOUT_MS = 2_500;
+// The DoM host is regularly slow from cloud regions. The old 2.5 s budget
+// reliably timed out while the source was healthy. Keep the budget below the
+// route's 60 s ceiling but generous enough for the measured 6-19 s responses.
+export const DEFAULT_DOM_TIMEOUT_MS = 25_000;
+export const SERVERLESS_DOM_TIMEOUT_MS = 22_000;
+export const DEFAULT_DOM_HTML_TIMEOUT_MS = 12_000;
 export const DEFAULT_METAR_TIMEOUT_MS = 8_000;
 
 function positiveNumber(value, fallback) {
@@ -68,7 +73,8 @@ function safeSourceError(error, fallbackCode = "source") {
 export async function fetchOfficialObservations({
   env = process.env,
   now = Date.now(),
-  domFetcher = fetchSriLankaObservations,
+  domFetcher = null,
+  officialFetcher = fetchSriLankaOfficialFeed,
   metarFetcher = fetchSriLankaMetarObservations,
   forceSource = null,
 } = {}) {
@@ -100,8 +106,18 @@ export async function fetchOfficialObservations({
 
   if (mode !== "metar") {
     try {
-      const dom = await domFetcher({
+      // A configured private relay returns the public map page, not the XLSX
+      // workbook, so keep the HTML fetcher for that deliberately narrow path.
+      // Without a relay, prefer the Department's richer workbook feed.
+      const fetcher = domFetcher
+        ? domFetcher
+        : domTargets.viaRelay
+          ? fetchSriLankaObservations
+          : officialFetcher;
+      const dom = await fetcher({
         timeoutMs: domTimeoutMs,
+        workbookTimeoutMs: domTimeoutMs,
+        htmlTimeoutMs: Math.min(DEFAULT_DOM_HTML_TIMEOUT_MS, domTimeoutMs),
         urls: domUrls,
         attemptsPerUrl: domTargets.viaRelay ? 2 : 1,
         now: currentTime,
@@ -117,6 +133,7 @@ export async function fetchOfficialObservations({
           name: "Department of Meteorology, Sri Lanka",
           url: SRI_LANKA_DOM_URL,
           viaRelay: domTargets.viaRelay,
+          representation: dom.retrieval?.representation || "map-page",
         },
       };
     } catch (error) {

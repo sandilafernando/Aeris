@@ -57,12 +57,15 @@ export function PreferencesProvider({ children }) {
       windUnit: preferences.windUnit,
       reducedEffects: preferences.reducedEffects,
       stationId: preferences.stationId,
+      weatherNotifications: preferences.weatherNotifications,
       measurementSystem: preferences.windUnit === "mph" ? "imperial" : "metric",
       setTheme: (theme) => updatePreferences({ theme }),
       setTemperatureUnit: (temperatureUnit) => updatePreferences({ temperatureUnit }),
       setWindUnit: (windUnit) => updatePreferences({ windUnit }),
       setReducedEffects: (reducedEffects) => updatePreferences({ reducedEffects }),
       setStationId: (stationId) => updatePreferences({ stationId }),
+      setWeatherNotifications: (weatherNotifications) =>
+        updatePreferences({ weatherNotifications }),
     }),
     [preferences, resolvedTheme, updatePreferences],
   );

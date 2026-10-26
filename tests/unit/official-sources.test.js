@@ -344,7 +344,7 @@ test("official observations fall back to clearly labelled NOAA AWC METAR", async
   assert.equal(result.stationCount, 2);
 });
 
-test("serverless deployments use a short DoM timeout before falling back", async () => {
+test("serverless deployments allow for measured DoM latency before falling back", async () => {
   let receivedTimeout = null;
   let receivedUrls = null;
   const result = await fetchOfficialObservations({
@@ -359,7 +359,8 @@ test("serverless deployments use a short DoM timeout before falling back", async
       normalizeMetarPayload(metarReports(), { fetchedAt: FIXED_FETCHED_AT }),
   });
 
-  assert.equal(receivedTimeout, 2_500);
+  assert.equal(receivedTimeout, 22_000);
+  assert.ok(receivedTimeout >= 20_000, "the timeout must cover measured DoM latency");
   assert.equal(receivedUrls.length, 1, "serverless attempts the primary host only");
   assert.equal(result.source.id, "sri-lanka-metar");
 });

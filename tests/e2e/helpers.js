@@ -7,6 +7,25 @@ const FORECAST_ROUTE = /api\.open-meteo\.com\/v1\/forecast/;
 const ENSEMBLE_ROUTE = /ensemble-api\.open-meteo\.com\/v1\/ensemble/;
 const ARCHIVE_ROUTE = /archive-api\.open-meteo\.com\/v1\/archive/;
 const DOM_ROUTE = "**/api/weather/sri-lanka-dom";
+const GIBS_ROUTE = "https://gibs.earthdata.nasa.gov/**";
+
+// A valid 1×1 PNG followed by ignored padding. The satellite card rejects
+// frames below 5 KB because GIBS advertises blank frames before ingestion
+// finishes, so the fixture must clear that threshold while staying decodable.
+const SATELLITE_FRAME = Buffer.concat([
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "base64",
+  ),
+  Buffer.alloc(6_000),
+]);
+
+function satelliteAvailabilityXml() {
+  const time = new Date(Date.now() - 20 * 60_000)
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z");
+  return `<Domains><SpaceDomain><BoundingBox miny='-90' maxx='180' maxy='90' minx='-180' crs='urn:ogc:def:crs:OGC:2:84'/></SpaceDomain><DimensionDomain><ows:Identifier>time</ows:Identifier><Domain>${time}/PT10M</Domain><Size>1</Size></DimensionDomain></Domains>`;
+}
 
 function environmentFor(latitude, longitude) {
   if (Math.abs(latitude - 38.7167) < 0.2) {
@@ -249,6 +268,8 @@ export async function mockOpenMeteo(page, options = {}) {
     archiveRequests: 0,
     officialObservationRequests: 0,
     officialObservationFailures: 0,
+    satelliteImageRequests: 0,
+    satelliteMetadataRequests: 0,
     weatherSuccesses: 0,
     weatherFailures: 0,
     failWeatherTimes: options.failWeatherTimes || 0,
@@ -336,6 +357,25 @@ export async function mockOpenMeteo(page, options = {}) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(buildArchivePayload()),
+    });
+  });
+
+  await page.route(GIBS_ROUTE, async (route) => {
+    const url = route.request().url();
+    if (url.includes(".xml")) {
+      state.satelliteMetadataRequests += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "text/xml",
+        body: satelliteAvailabilityXml(),
+      });
+      return;
+    }
+    state.satelliteImageRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "image/png",
+      body: SATELLITE_FRAME,
     });
   });
 

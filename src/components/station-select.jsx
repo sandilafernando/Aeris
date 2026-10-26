@@ -52,6 +52,7 @@ export default function StationSelect({
         {available.map((station) => (
           <option key={station.id} value={station.id}>
             {station.name}
+            {station.stationId ? ` · ${station.stationId}` : ""}
           </option>
         ))}
       </select>

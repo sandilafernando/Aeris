@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { Cloud, Droplets, Eye, Gauge, ThermometerSun, Wind } from "lucide-react";
 import { usePreferences } from "@/components/preferences-provider";
 import { formatNumber } from "@/lib/format";
@@ -47,7 +48,7 @@ function Metric({ icon: Icon, label, value, supporting, accent = false }) {
   );
 }
 
-export default function Atmosphere({ current }) {
+function Atmosphere({ current }) {
   const { temperatureUnit, windUnit, measurementSystem } = usePreferences();
 
   const pressure = Number.isFinite(current.pressure)
@@ -128,3 +129,5 @@ export default function Atmosphere({ current }) {
     </section>
   );
 }
+
+export default memo(Atmosphere);

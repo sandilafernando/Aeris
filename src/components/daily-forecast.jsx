@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { memo, useRef, useState } from "react";
 import { ChevronRight, Droplet } from "lucide-react";
 import DailyDetailDialog from "@/components/daily-detail-dialog";
 import { WeatherLineIcon } from "@/components/weather-artwork";
@@ -12,7 +12,7 @@ import {
 } from "@/lib/weather";
 import { cn } from "@/lib/utils";
 
-export default function DailyForecast({ daily, timezone, locationName }) {
+function DailyForecast({ daily, timezone, locationName }) {
   const { temperatureUnit } = usePreferences();
   const [selectedDay, setSelectedDay] = useState(null);
   const openerRef = useRef(null);
@@ -173,3 +173,5 @@ export default function DailyForecast({ daily, timezone, locationName }) {
     </section>
   );
 }
+
+export default memo(DailyForecast);

@@ -31,14 +31,16 @@ function errorMessageForResponse(response) {
   return "The weather forecast could not be loaded. Please try again.";
 }
 
-async function requestWeather(place) {
+async function requestWeather(place, { force = false } = {}) {
   const key = placeKey(place);
-  const cached = weatherCache.get(key);
-  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
-    return cached;
-  }
+  if (!force) {
+    const cached = weatherCache.get(key);
+    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
+      return cached;
+    }
 
-  if (inFlightRequests.has(key)) return inFlightRequests.get(key);
+    if (inFlightRequests.has(key)) return inFlightRequests.get(key);
+  }
 
   const request = (async () => {
     const controller = new AbortController();
@@ -74,11 +76,11 @@ async function requestWeather(place) {
       );
     } finally {
       clearTimeout(timer);
-      inFlightRequests.delete(key);
+      if (!force) inFlightRequests.delete(key);
     }
   })();
 
-  inFlightRequests.set(key, request);
+  if (!force) inFlightRequests.set(key, request);
   return request;
 }
 
@@ -107,7 +109,7 @@ export function useWeather(location) {
       weatherCache.delete(key);
     }
 
-    requestWeather(location)
+    requestWeather(location, { force })
       .then((data) => {
         if (cancelled) return;
         setState({

@@ -105,8 +105,8 @@ test("a missing manual station is preserved and explained instead of replaced", 
   const card = page.getByTestId("official-observations");
   const alert = card.getByRole("alert");
   await expect(alert).toBeVisible();
-  await expect(alert).toContainText("Your saved station is not available");
-  await expect(alert).toContainText("Your selection has not been changed");
+  await expect(alert).toContainText("Saved station is not in this response");
+  await expect(alert).toContainText("Your manual choice has not been changed");
   await expect(card.getByTestId("official-temperature")).toHaveCount(0);
 
   const dashboardSelect = page.locator("#official-station-select");
@@ -173,12 +173,13 @@ test("an observation failure is shown honestly and can be retried", async ({ pag
   const card = page.getByTestId("official-observations");
   const alert = card.getByRole("alert");
   await expect(alert).toBeVisible();
-  await expect(alert).toContainText("Official observations unavailable");
-  await expect(alert).toContainText("Test observation failure");
+  await expect(alert).toContainText("Official readings offline");
+  await expect(alert).toContainText("The Department of Meteorology did not respond");
+  await expect(alert).toContainText("Retrying in");
   expect(state.officialObservationRequests).toBe(1);
   expect(state.officialObservationFailures).toBe(1);
 
-  await alert.getByRole("button", { name: "Try again" }).click();
+  await alert.getByRole("button", { name: /Retry/ }).click();
   await expect(card.getByTestId("official-station-name")).toHaveText("COLOMBO");
   await expect(alert).toBeHidden();
   await expect.poll(() => state.officialObservationRequests).toBe(2);

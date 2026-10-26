@@ -6,16 +6,19 @@ import {
   ArrowRight,
   CheckCircle2,
   CloudRain,
+  CloudOff,
   Droplets,
   ExternalLink,
   Eye,
   Gauge,
+  Info,
   LoaderCircle,
   MapPin,
   RefreshCw,
   Thermometer,
   Waves,
   Wind,
+  X,
 } from "lucide-react";
 import { usePreferences } from "@/components/preferences-provider";
 import StationSelect from "@/components/station-select";
@@ -76,6 +79,68 @@ function distanceLabel(distance) {
   return `${formatNumber(distance, {
     maximumFractionDigits: distance < 10 ? 1 : 0,
   })} km`;
+}
+
+function cloudCover(value) {
+  if (!Number.isFinite(value)) return "Unavailable";
+  return `${formatNumber(value)}/8 oktas`;
+}
+
+function StatusStrip({
+  tone = "info",
+  icon: Icon = Info,
+  label,
+  detail,
+  retryInSeconds = 0,
+  onRetry,
+  onDismiss,
+}) {
+  const destructive = tone === "error";
+  return (
+    <div
+      role={destructive ? "alert" : "status"}
+      className={cn(
+        "relative mt-3 flex items-start gap-2 rounded-xl border px-2.5 py-2 text-[0.68rem] leading-4",
+        destructive
+          ? "border-destructive/20 bg-destructive/5"
+          : "border-outline-variant/70 bg-tertiary-container/55 text-on-tertiary-container",
+      )}
+    >
+      <Icon
+        aria-hidden="true"
+        className={cn(
+          "mt-0.5 size-3.5 shrink-0",
+          destructive && "text-destructive",
+        )}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold">{label}</p>
+        <p className={cn("mt-0.5", destructive ? "text-muted-foreground" : "opacity-85")}>
+          {detail}
+          {retryInSeconds > 0 ? ` Retrying in ${retryInSeconds}s.` : ""}
+        </p>
+      </div>
+      {onRetry ? (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="min-h-8 shrink-0 rounded-full px-2 text-[0.64rem] font-semibold text-primary hover:bg-primary-container"
+        >
+          {retryInSeconds > 0 ? "Retry now" : "Retry"}
+        </button>
+      ) : null}
+      {onDismiss ? (
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label={`Dismiss ${label}`}
+          className="-my-1 -mr-1 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-surface-container hover:text-foreground"
+        >
+          <X aria-hidden="true" className="size-3.5" />
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 function Metric({ icon: Icon, label, value, supporting }) {
@@ -280,9 +345,11 @@ export default function OfficialObservations({
   now = 0,
   stationId = "auto",
   onStationChange,
+  online = true,
 }) {
   const { temperatureUnit, windUnit } = usePreferences();
-  const { status, data, error, refresh } = official;
+  const { status, data, error, refresh, retryInSeconds = 0 } = official;
+  const [dismissed, setDismissed] = useState("");
   const stations = data?.stations || [];
   const sourceId = data?.source?.id || null;
   const isMetar =
@@ -311,6 +378,7 @@ export default function OfficialObservations({
     ? observationAgeMinutes(selected, referenceNow)
     : null;
   const upstreamStale = data?.status === "stale" || Boolean(data?.upstreamStale);
+  const clientStale = status === "stale";
   // `fetchedAt` is when the DoM page was actually retrieved; `servedAt` is
   // when this response left Aeris. Keep both distinct so a cached response
   // can never make an old observation look freshly fetched.
@@ -328,7 +396,27 @@ export default function OfficialObservations({
             ? ` · gusts ${formatWind(selected.windGustKmh, windUnit)}`
             : ""
         }`
-      : null;
+      : selected?.windDirectionCompass || null;
+  const representation = data?.retrieval?.representation || null;
+  const representationLabel =
+    representation === "workbook"
+      ? "3-hourly workbook"
+      : representation === "map-page"
+        ? "map page subset"
+        : null;
+  const sourceHref = isMetar
+    ? data?.source?.url
+    : data?.source?.feedUrl || data?.source?.url;
+  const statusSignature = [
+    status,
+    data?.fallback?.active ? "fallback" : "",
+    data?.notice ? "notice" : "",
+    upstreamStale ? "upstream-stale" : "",
+    clientStale ? "client-stale" : "",
+  ].join("|");
+  const statusDismissed = dismissed === statusSignature;
+  const dismissStatus = () => setDismissed(statusSignature);
+  const retryAction = failed || clientStale ? refresh : null;
   const referenceNote = isMetar
     ? "These are airport station coordinates published by NOAA AWC. They are not Department of Meteorology district stations, and they are not approximate city-centre points."
     : `${data?.source?.referenceNote || "Approximate city-centre reference points are not official station coordinates."} The DoM page inspected by Aeris does not publish station coordinates, so distance and automatic selection are approximate.`;
@@ -349,6 +437,7 @@ export default function OfficialObservations({
           <p className="eyebrow flex items-center gap-1.5">
             <MapPin aria-hidden="true" className="size-3" />
             Official observation · {sourceLabel}
+            {representationLabel ? ` · ${representationLabel}` : ""}
           </p>
           <h2
             id="official-observations-heading"
@@ -358,9 +447,9 @@ export default function OfficialObservations({
           </h2>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {data?.source?.url ? (
+          {sourceHref ? (
             <a
-              href={data.source.url}
+              href={sourceHref}
               target="_blank"
               rel="noreferrer noopener"
               className="inline-flex min-h-10 items-center gap-1 rounded-full px-2.5 text-[0.68rem] font-semibold text-primary transition-colors hover:bg-primary-container"
@@ -427,58 +516,90 @@ export default function OfficialObservations({
         </div>
       ) : null}
 
-      {failed ? (
-        <div
-          role="alert"
-          className="relative mt-3 rounded-2xl border border-destructive/20 bg-destructive/5 px-3.5 py-3 text-xs leading-5"
-        >
-          <p className="flex items-start gap-2 font-semibold">
-            <AlertTriangle
-              aria-hidden="true"
-              className="mt-0.5 size-4 shrink-0 text-destructive"
-            />
-            Official observations unavailable
-          </p>
-          <p className="mt-1 text-muted-foreground">{error}</p>
-          <button
-            type="button"
-            onClick={refresh}
-            className="mt-2 min-h-9 rounded-full px-3 text-[0.68rem] font-semibold text-primary hover:bg-primary-container"
-          >
-            Try again
-          </button>
-        </div>
+      {failed && !statusDismissed ? (
+        <StatusStrip
+          tone="error"
+          icon={CloudOff}
+          label={online ? "Official readings offline" : "No network connection"}
+          detail={
+            online
+              ? "The Department of Meteorology did not respond. The forecast is unaffected."
+              : "Reconnect to load official station observations. The forecast is unaffected."
+          }
+          retryInSeconds={retryInSeconds}
+          onRetry={online ? retryAction : null}
+          onDismiss={dismissStatus}
+        />
       ) : null}
 
-      {data?.notice ? (
-        <p className="relative mt-3 rounded-xl bg-tertiary-container/70 px-3 py-2 text-[0.68rem] leading-5 text-on-tertiary-container">
-          {data.notice}
-        </p>
+      {!failed && clientStale && !statusDismissed ? (
+        <StatusStrip
+          icon={AlertTriangle}
+          label="Cached official reading"
+          detail={
+            !online
+              ? "This device is offline. Showing the last successful response, not a live reading."
+              : error
+                ? "This is the last successful response, not a live reading. Aeris retries automatically."
+                : "This is the last successful response, not a live reading."
+          }
+          retryInSeconds={retryInSeconds}
+          onRetry={online ? retryAction : null}
+          onDismiss={dismissStatus}
+        />
       ) : null}
 
-      {upstreamStale && !data?.notice ? (
-        <p className="relative mt-3 rounded-xl bg-tertiary-container/70 px-3 py-2 text-[0.68rem] leading-5 text-on-tertiary-container">
-          The official page could not refresh. This is the last successful fetch, not a live
-          reading.
-        </p>
+      {!failed && !clientStale && !statusDismissed && data?.fallback?.active ? (
+        <StatusStrip
+          icon={CloudOff}
+          label="Airport fallback active"
+          detail="DoM is unreachable. Showing NOAA AWC airport METAR reports, not DoM district observations."
+          onDismiss={dismissStatus}
+        />
+      ) : null}
+
+      {!failed &&
+      !clientStale &&
+      !statusDismissed &&
+      !data?.fallback?.active &&
+      data?.notice ? (
+        <StatusStrip
+          icon={Info}
+          label="Limited DoM feed"
+          detail="The 3-hourly workbook is unavailable, so Aeris is using the map page. It omits wind, pressure, cloud cover, and dew point."
+          onDismiss={dismissStatus}
+        />
+      ) : null}
+
+      {!failed &&
+      !clientStale &&
+      !statusDismissed &&
+      !data?.fallback?.active &&
+      !data?.notice &&
+      upstreamStale ? (
+        <StatusStrip
+          icon={AlertTriangle}
+          label="Cached DoM response"
+          detail="The Department did not refresh. This is the last successful response, not a live reading."
+          onDismiss={dismissStatus}
+        />
       ) : null}
 
       {manualMissing ? (
         <div
           role="alert"
-          className="relative mt-3 rounded-2xl border border-tertiary/30 bg-tertiary-container/60 px-3.5 py-3 text-xs leading-5 text-on-tertiary-container"
+          className="relative mt-3 rounded-xl border border-tertiary/30 bg-tertiary-container/60 px-2.5 py-2 text-[0.68rem] leading-4 text-on-tertiary-container"
         >
           <p className="flex items-start gap-2 font-semibold">
-            <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-            Your saved station is not available
+            <AlertTriangle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+            Saved station is not in this response
           </p>
-          <p className="mt-1 opacity-90">
-            The station chosen in Preferences is not in this official response. Your selection
-            has not been changed. Choose another station or switch back to Automatic.
+          <p className="mt-0.5 opacity-90">
+            Your manual choice has not been changed. Choose another station or Automatic.
           </p>
           {selection.alternatives.length ? (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span className="text-[0.62rem] font-semibold uppercase tracking-[0.08em] opacity-80">
+            <div className="mt-1.5 flex flex-wrap items-center gap-1">
+              <span className="text-[0.6rem] font-semibold uppercase tracking-[0.08em] opacity-80">
                 Alternatives
               </span>
               {selection.alternatives.map((station) => (
@@ -486,7 +607,7 @@ export default function OfficialObservations({
                   key={station.id}
                   type="button"
                   onClick={() => onStationChange(station.id)}
-                  className="min-h-8 rounded-full bg-card/70 px-2.5 text-[0.66rem] font-semibold text-foreground transition-colors hover:bg-card"
+                  className="min-h-8 rounded-full bg-card/70 px-2 text-[0.64rem] font-semibold text-foreground transition-colors hover:bg-card"
                 >
                   {station.name}
                 </button>
@@ -504,12 +625,22 @@ export default function OfficialObservations({
                 <p className="text-[0.58rem] font-bold uppercase tracking-[0.12em] text-muted-foreground">
                   {selection.mode === "manual" ? "Manual station" : "Automatic station"}
                 </p>
-                <p
-                  data-testid="official-station-name"
-                  className="mt-0.5 truncate font-display text-lg font-semibold tracking-[-0.02em]"
-                >
-                  {selected.name}
-                </p>
+                <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                  <p
+                    data-testid="official-station-name"
+                    className="truncate font-display text-lg font-semibold tracking-[-0.02em]"
+                  >
+                    {selected.name}
+                  </p>
+                  {selected.stationId ? (
+                    <span
+                      title="Station identifier published by the Department of Meteorology"
+                      className="shrink-0 rounded-full bg-surface-container-high px-1.5 py-0.5 font-mono text-[0.58rem] font-semibold text-muted-foreground"
+                    >
+                      {selected.stationId}
+                    </span>
+                  ) : null}
+                </div>
                 <p className="mt-0.5 text-[0.66rem] leading-4 text-muted-foreground">
                   {isMetar && selected.locationName
                     ? `${selected.locationName}${
@@ -531,6 +662,9 @@ export default function OfficialObservations({
                 </p>
                 <p className="mt-1 text-[0.66rem] font-medium leading-4 text-muted-foreground">
                   {selected.conditionLabel || "Condition not reported"}
+                  {Number.isFinite(selected.cloudCoverOktas)
+                    ? ` · ${cloudCover(selected.cloudCoverOktas)} cloud`
+                    : ""}
                 </p>
               </div>
             </div>
@@ -549,11 +683,13 @@ export default function OfficialObservations({
                 ) : (
                   <CheckCircle2 aria-hidden="true" className="size-3" />
                 )}
-                {selectedStale
-                  ? "Station data delayed"
-                  : isMetar
-                    ? "Official airport report"
-                    : "Official reading"}
+                {clientStale
+                  ? "Cached, not live"
+                  : selectedStale
+                    ? "Station data delayed"
+                    : isMetar
+                      ? "Official airport report"
+                      : "Official reading"}
               </span>
               <span
                 className="text-[0.68rem] font-semibold"
@@ -608,11 +744,23 @@ export default function OfficialObservations({
                 />
               </dl>
             ) : (
-              <dl className="mt-3 grid grid-cols-3 gap-1.5">
+              <dl className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                 <Metric
                   icon={Droplets}
                   label="Humidity"
                   value={percent(selected.relativeHumidity)}
+                />
+                <Metric
+                  icon={Wind}
+                  label="Wind"
+                  value={windValue}
+                  supporting={windSupporting}
+                />
+                <Metric
+                  icon={Gauge}
+                  label="Pressure"
+                  value={pressure(selected.pressureHpa)}
+                  supporting="MSLP"
                 />
                 <Metric
                   icon={CloudRain}
@@ -624,12 +772,17 @@ export default function OfficialObservations({
                   label="Since 08:30"
                   value={millimetres(selected.rainfallSince0830Mm)}
                 />
+                <Metric
+                  icon={Thermometer}
+                  label="Dew point"
+                  value={officialTemperature(selected.dewPointC, temperatureUnit)}
+                />
               </dl>
             )}
             <p className="mt-2 text-[0.62rem] leading-4 text-muted-foreground">
               {isMetar
                 ? "Temperature, humidity, wind, pressure, and visibility are official values from the airport METAR report. METAR does not carry a rainfall total, so Aeris leaves rainfall unavailable rather than showing zero."
-                : "Temperature and rainfall are official DoM values, separate from the Open-Meteo forecast. A blank measurement means unavailable; 0.0 mm is a reported zero."}
+                : `Temperature, humidity, wind, pressure, dew point, and rainfall are official DoM values from the ${representationLabel || "published feed"}, separate from the Open-Meteo forecast. A blank measurement means unavailable; 0.0 mm is a reported zero.`}
             </p>
           </div>
 
@@ -666,6 +819,8 @@ export default function OfficialObservations({
             <div className="mt-2 space-y-1.5 border-t border-outline-variant pt-2 text-muted-foreground">
               <p>{selectionExplanation(selection)}</p>
               <p>{referenceNote}</p>
+              {data?.fallback?.notice ? <p>{data.fallback.notice}</p> : null}
+              {data?.notice && data.notice !== data?.fallback?.notice ? <p>{data.notice}</p> : null}
             </div>
           </details>
         </div>

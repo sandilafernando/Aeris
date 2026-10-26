@@ -55,9 +55,18 @@ const SOURCES = [
     role: "Primary official 3-hourly station observations",
     url: "https://meteo.gov.lk/",
     detail:
-      "Parsed server-side from the public station page. The station coordinates are not published there, so model comparisons use approximate city-centre reference points created by Aeris. If this host is unreachable from the deployment region, Aeris labels the fallback below instead of pretending the data came from DoM.",
+      "Aeris reads the Department's own 3-hourly station workbook first, then its public map page if the workbook is unavailable. The workbook includes station identifiers, wind, pressure, cloud cover, and dew point; the map page omits them. Neither feed publishes station coordinates, so model comparisons use approximate city-centre reference points created by Aeris. If DoM cannot be reached, Aeris labels the fallback below instead of pretending the data came from DoM.",
     badge: "Official",
     tone: "official",
+  },
+  {
+    name: "NASA EOSDIS GIBS",
+    role: "Satellite cloud imagery",
+    url: "https://gibs.earthdata.nasa.gov/",
+    detail:
+      "NASA's Global Imagery Browse Services renders Himawari-9 infrared and VIIRS natural-colour imagery around Sri Lanka. It is an independent satellite product, not a DoM observation and not rain radar; cloud-top colour does not prove surface rainfall.",
+    badge: "Satellite",
+    tone: "live",
   },
   {
     name: "NOAA Aviation Weather Center",
@@ -173,10 +182,11 @@ export default function SourcesDialog({ open, onOpenChange, onCloseAutoFocus }) 
             <p className="mt-1.5 text-[0.68rem] leading-5 text-muted-foreground">
               Open-Meteo data is used under CC BY 4.0. Place search uses GeoNames data.
               Official station observations remain attributed to the Department of
-              Meteorology, Sri Lanka, with a link to the original page. NOAA AWC METAR reports
-              are attributed separately when they are used as the fallback. Aeris is an
+              Meteorology, Sri Lanka, with a link to the original feed. NOAA AWC METAR reports
+              are attributed separately when they are used as the fallback. Satellite imagery
+              is rendered by NASA EOSDIS GIBS from Himawari-9 and VIIRS data. Aeris is an
               independent project, not affiliated with Google, the Department of Meteorology,
-              or NOAA.
+              NOAA, or NASA.
             </p>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[0.68rem] font-semibold">
               <a
@@ -204,6 +214,15 @@ export default function SourcesDialog({ open, onOpenChange, onCloseAutoFocus }) 
                 className="inline-flex min-h-8 items-center gap-1 text-primary underline decoration-outline-variant underline-offset-4"
               >
                 NOAA AWC
+                <ExternalLink aria-hidden="true" className="size-3" />
+              </a>
+              <a
+                href="https://gibs.earthdata.nasa.gov/"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex min-h-8 items-center gap-1 text-primary underline decoration-outline-variant underline-offset-4"
+              >
+                NASA GIBS
                 <ExternalLink aria-hidden="true" className="size-3" />
               </a>
             </div>

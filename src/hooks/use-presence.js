@@ -61,6 +61,7 @@ export function usePresence() {
     let reconnectAttempt = 0;
     let disposed = false;
     let online = window.navigator.onLine;
+    let lastPublishedAt = 0;
 
     const recordList = () => Array.from(records, ([recordId, t]) => ({ id: recordId, t }));
 
@@ -121,6 +122,12 @@ export function usePresence() {
     const publishHeartbeat = async () => {
       if (disposed || publishing || !online) return;
       if (document.visibilityState !== "visible") return;
+      // Visibility changes reopen the heartbeat. Suppress an immediate publish
+      // when this tab already published within the heartbeat window, so a
+      // shared public relay is not drained by every tab switch.
+      const now = Date.now();
+      if (now - lastPublishedAt < PRESENCE_HEARTBEAT_MS - 5_000) return;
+      lastPublishedAt = now;
 
       const payload = presenceHeartbeatPayload(id, Date.now());
       if (!payload) return;

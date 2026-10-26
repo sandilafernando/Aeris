@@ -1,11 +1,53 @@
 const FALLBACK_TIME_ZONE = "UTC";
 
+// Intl formatter construction is expensive (hundreds of microseconds) and the
+// dashboard formats dozens of timestamps per render. Cache validated zones and
+// formatters at module scope; formatting itself is cheap.
+const timeZoneCache = new Map([[FALLBACK_TIME_ZONE, FALLBACK_TIME_ZONE]]);
+const dateTimeFormatCache = new Map();
+const numberFormatCache = new Map();
+
+function optionsKey(options) {
+  return Object.keys(options)
+    .sort()
+    .map((key) => `${key}:${options[key]}`)
+    .join("|");
+}
+
+function dateTimeFormat(locale, timeZone, options) {
+  const zone = safeTimeZone(timeZone);
+  const cacheKey = `${locale || "default"}|${zone}|${optionsKey(options)}`;
+  let formatter = dateTimeFormatCache.get(cacheKey);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, { timeZone: zone, ...options });
+    dateTimeFormatCache.set(cacheKey, formatter);
+  }
+  return formatter;
+}
+
+function numberFormat(options) {
+  const cacheKey = optionsKey(options);
+  let formatter = numberFormatCache.get(cacheKey);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(undefined, {
+      maximumFractionDigits: 0,
+      ...options,
+    });
+    numberFormatCache.set(cacheKey, formatter);
+  }
+  return formatter;
+}
+
 export function safeTimeZone(timeZone) {
   if (!timeZone || typeof timeZone !== "string") return FALLBACK_TIME_ZONE;
+  const cached = timeZoneCache.get(timeZone);
+  if (cached) return cached;
   try {
     new Intl.DateTimeFormat("en", { timeZone }).format();
+    timeZoneCache.set(timeZone, timeZone);
     return timeZone;
   } catch {
+    timeZoneCache.set(timeZone, FALLBACK_TIME_ZONE);
     return FALLBACK_TIME_ZONE;
   }
 }
@@ -19,8 +61,7 @@ function toDate(timestamp) {
 export function formatLocalDate(timestamp, timeZone, locale) {
   const date = toDate(timestamp);
   if (!date) return "Unavailable";
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: safeTimeZone(timeZone),
+  return dateTimeFormat(locale, timeZone, {
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -30,26 +71,19 @@ export function formatLocalDate(timestamp, timeZone, locale) {
 export function formatWeekday(timestamp, timeZone, locale) {
   const date = toDate(timestamp);
   if (!date) return "Unavailable";
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: safeTimeZone(timeZone),
-    weekday: "long",
-  }).format(date);
+  return dateTimeFormat(locale, timeZone, { weekday: "long" }).format(date);
 }
 
 export function formatWeekdayShort(timestamp, timeZone, locale) {
   const date = toDate(timestamp);
   if (!date) return "Unavailable";
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: safeTimeZone(timeZone),
-    weekday: "short",
-  }).format(date);
+  return dateTimeFormat(locale, timeZone, { weekday: "short" }).format(date);
 }
 
 export function formatMonthDay(timestamp, timeZone, locale) {
   const date = toDate(timestamp);
   if (!date) return "Unavailable";
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: safeTimeZone(timeZone),
+  return dateTimeFormat(locale, timeZone, {
     month: "long",
     day: "numeric",
   }).format(date);
@@ -58,8 +92,7 @@ export function formatMonthDay(timestamp, timeZone, locale) {
 export function formatShortDate(timestamp, timeZone, locale) {
   const date = toDate(timestamp);
   if (!date) return "Unavailable";
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: safeTimeZone(timeZone),
+  return dateTimeFormat(locale, timeZone, {
     month: "short",
     day: "numeric",
   }).format(date);
@@ -68,8 +101,7 @@ export function formatShortDate(timestamp, timeZone, locale) {
 export function formatTime(timestamp, timeZone, locale) {
   const date = toDate(timestamp);
   if (!date) return "Unavailable";
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: safeTimeZone(timeZone),
+  return dateTimeFormat(locale, timeZone, {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
@@ -78,17 +110,13 @@ export function formatTime(timestamp, timeZone, locale) {
 export function formatHour(timestamp, timeZone, locale) {
   const date = toDate(timestamp);
   if (!date) return "Unavailable";
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: safeTimeZone(timeZone),
-    hour: "numeric",
-  }).format(date);
+  return dateTimeFormat(locale, timeZone, { hour: "numeric" }).format(date);
 }
 
 export function formatFullDateTime(timestamp, timeZone, locale) {
   const date = toDate(timestamp);
   if (!date) return "Unavailable";
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: safeTimeZone(timeZone),
+  return dateTimeFormat(locale, timeZone, {
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -100,8 +128,7 @@ export function formatFullDateTime(timestamp, timeZone, locale) {
 
 export function formatTimezoneAbbreviation(timeZone, locale) {
   try {
-    const parts = new Intl.DateTimeFormat(locale, {
-      timeZone: safeTimeZone(timeZone),
+    const parts = dateTimeFormat(locale, timeZone, {
       timeZoneName: "short",
     }).formatToParts(new Date());
     return parts.find((part) => part.type === "timeZoneName")?.value || "";
@@ -113,8 +140,7 @@ export function formatTimezoneAbbreviation(timeZone, locale) {
 export function localDateKey(timestamp, timeZone) {
   const date = toDate(timestamp);
   if (!date) return "";
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: safeTimeZone(timeZone),
+  return dateTimeFormat("en-CA", timeZone, {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -164,8 +190,5 @@ export function formatDaylightDuration(seconds) {
 
 export function formatNumber(value, options = {}) {
   if (!Number.isFinite(value)) return "Unavailable";
-  return new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 0,
-    ...options,
-  }).format(value);
+  return numberFormat(options).format(value);
 }

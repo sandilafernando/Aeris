@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Droplet } from "lucide-react";
 import { useReducedMotion } from "motion/react";
 import { WeatherLineIcon } from "@/components/weather-artwork";
@@ -9,7 +9,7 @@ import { formatHour } from "@/lib/format";
 import { formatTemperature } from "@/lib/weather";
 import { cn } from "@/lib/utils";
 
-export default function HourlyForecast({ hourly, timezone, locationName }) {
+function HourlyForecast({ hourly, timezone, locationName }) {
   const { temperatureUnit } = usePreferences();
   const reduceMotion = useReducedMotion();
   const scrollRef = useRef(null);
@@ -165,3 +165,5 @@ export default function HourlyForecast({ hourly, timezone, locationName }) {
     </section>
   );
 }
+
+export default memo(HourlyForecast);

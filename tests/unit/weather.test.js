@@ -221,6 +221,7 @@ test("preference storage normalizes invalid values", () => {
     windUnit: "kmh",
     reducedEffects: false,
     stationId: "auto",
+    weatherNotifications: false,
   });
   assert.deepEqual(
     normalizePreferences({ theme: "sepia", temperatureUnit: "f", windUnit: "knots" }),
@@ -230,6 +231,7 @@ test("preference storage normalizes invalid values", () => {
       windUnit: "kmh",
       reducedEffects: false,
       stationId: "auto",
+      weatherNotifications: false,
     },
   );
   assert.deepEqual(
@@ -239,6 +241,7 @@ test("preference storage normalizes invalid values", () => {
       windUnit: "mph",
       reducedEffects: true,
       stationId: "colombo",
+      weatherNotifications: true,
     }),
     {
       theme: "dark",
@@ -246,9 +249,11 @@ test("preference storage normalizes invalid values", () => {
       windUnit: "mph",
       reducedEffects: true,
       stationId: "colombo",
+      weatherNotifications: true,
     },
   );
   assert.equal(normalizePreferences({ reducedEffects: "yes" }).reducedEffects, false);
+  assert.equal(normalizePreferences({ weatherNotifications: "yes" }).weatherNotifications, false);
   assert.equal(normalizeStationPreference("  COLOMBO  "), "colombo");
   assert.equal(normalizeStationPreference("auto"), "auto");
   assert.equal(normalizeStationPreference("bad id!"), "auto");
