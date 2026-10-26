@@ -3,7 +3,7 @@ name: Fetch Sri Lanka Weather Observations
 
 on:
   schedule:
-    - cron: '23 0,3,6,9,12,15,18,21 * * *'
+    - cron: '7,37 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -30,7 +30,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Fetch and filter official station observations
+      - name: Fetch and filter official weather observations
         env:
           METEO_URL: https://meteo.gov.lk/
           OUTPUT_FILE: data/meteo.json
@@ -44,10 +44,36 @@ jobs:
           from html.parser import HTMLParser
           from pathlib import Path
           from urllib.request import Request, urlopen
+          from zoneinfo import ZoneInfo
 
           URL = os.environ["METEO_URL"]
           OUTPUT = Path(os.environ["OUTPUT_FILE"])
           RETRIES = int(os.environ.get("MAX_RETRIES", "3"))
+          SL_TZ = ZoneInfo("Asia/Colombo")
+
+          def parse_station_time(value):
+              if not isinstance(value, str):
+                  return None
+
+              value = value.strip()
+              formats = (
+                  "%Y-%m-%d %H%M",
+                  "%Y-%m-%d %H:%M",
+                  "%Y-%m-%d %H:%M:%S",
+                  "%Y-%m-%dT%H:%M:%S%z",
+                  "%Y-%m-%dT%H:%M:%S",
+              )
+
+              for fmt in formats:
+                  try:
+                      parsed = datetime.strptime(value, fmt)
+                      if parsed.tzinfo is None:
+                          parsed = parsed.replace(tzinfo=SL_TZ)
+                      return parsed.astimezone(SL_TZ)
+                  except ValueError:
+                      continue
+
+              return None
 
           class StationParser(HTMLParser):
               def __init__(self):
@@ -79,7 +105,6 @@ jobs:
                   if not isinstance(weather, dict):
                       return
 
-                  # Keep only fields relevant to current station weather.
                   allowed = {
                       "lastUpdated",
                       "rainfall",
@@ -94,14 +119,13 @@ jobs:
                       for key, value in weather.items()
                       if key in allowed
                       and value is not None
-                      and value != ""
-                      and value != "-"
+                      and str(value).strip() not in ("", "-")
                   }
 
-                  # Ignore empty station records.
+                  # Do not accept a station containing only a timestamp.
                   if not any(
-                      key != "lastUpdated" and value is not None
-                      for key, value in filtered.items()
+                      key != "lastUpdated"
+                      for key in filtered
                   ):
                       return
 
@@ -128,7 +152,9 @@ jobs:
                           raise RuntimeError(
                               f"HTTP status {response.status}"
                           )
-                      html = response.read().decode("utf-8", errors="replace")
+                      html = response.read().decode(
+                          "utf-8", errors="replace"
+                      )
 
                   break
               except Exception as exc:
@@ -138,27 +164,60 @@ jobs:
                       time.sleep(attempt * 3)
 
           if html is None:
-              raise SystemExit(f"Could not fetch official website: {last_error}")
+              raise SystemExit(
+                  f"Could not fetch official website: {last_error}"
+              )
 
           parser = StationParser()
           parser.feed(html)
 
-          # Remove duplicate station names, keeping the last record.
+          # Deduplicate stations, retaining the last record per station.
           unique = {}
           for station in parser.stations:
               unique[station["name"]] = station
 
-          stations = sorted(unique.values(), key=lambda x: x["name"])
+          stations = sorted(
+              unique.values(), key=lambda station: station["name"]
+          )
 
           if not stations:
               raise SystemExit(
                   "No valid station observations found. "
-                  "The website HTML format may have changed."
+                  "Keeping the previous published dataset unchanged."
               )
+
+          # Find the newest station-provided observation timestamp.
+          dated_stations = []
+          for station in stations:
+              raw_time = station["weather"].get("lastUpdated")
+              parsed_time = parse_station_time(raw_time)
+              if parsed_time:
+                  dated_stations.append((parsed_time, raw_time))
+
+          latest_observation_raw = None
+          latest_observation_sl = None
+
+          if dated_stations:
+              latest_parsed, latest_observation_raw = max(
+                  dated_stations, key=lambda item: item[0]
+              )
+              latest_observation_sl = latest_parsed.isoformat()
+
+          fetched_utc = datetime.now(timezone.utc)
+          fetched_sl = fetched_utc.astimezone(SL_TZ)
 
           result = {
               "source": URL,
-              "fetchedAt": datetime.now(timezone.utc).isoformat(),
+              "fetchedAt": fetched_utc.isoformat(),
+              "fetchedAtSriLanka": fetched_sl.isoformat(),
+              "fetchedAtSriLankaDisplay": fetched_sl.strftime(
+                  "%Y-%m-%d %H:%M:%S"
+              ),
+              "timezone": "Asia/Colombo",
+              "meteoLatestObservationUpdatedAt": latest_observation_raw,
+              "meteoLatestObservationUpdatedAtSriLanka": (
+                  latest_observation_sl
+              ),
               "stationCount": len(stations),
               "stations": stations,
           }
@@ -172,34 +231,50 @@ jobs:
           temporary.replace(OUTPUT)
 
           print(f"Saved {len(stations)} stations to {OUTPUT}")
-          for station in stations:
-              print(f"  {station['name']}")
+          print(
+              "Fetched from website (Sri Lanka time): "
+              f"{result['fetchedAtSriLankaDisplay']}"
+          )
+          print(
+              "Latest station observation timestamp: "
+              f"{latest_observation_raw or 'Not supplied'}"
+          )
           PY
 
-      - name: Validate generated weather data
+      - name: Validate weather JSON
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
 
           path = Path("data/meteo.json")
+          if not path.is_file() or path.stat().st_size == 0:
+              raise SystemExit("Weather JSON is missing or empty")
+
           data = json.loads(path.read_text(encoding="utf-8"))
+          stations = data.get("stations")
 
-          if not isinstance(data.get("stations"), list):
-              raise SystemExit("Invalid output: stations must be a list")
+          if not isinstance(stations, list) or not stations:
+              raise SystemExit("No valid station records")
 
-          if not data["stations"]:
-              raise SystemExit("Invalid output: no stations")
+          if data.get("stationCount") != len(stations):
+              raise SystemExit("Station count does not match records")
 
-          if data.get("stationCount") != len(data["stations"]):
-              raise SystemExit("Invalid output: station count mismatch")
+          required = {"name", "weather"}
+          for station in stations:
+              if not required.issubset(station):
+                  raise SystemExit("Invalid station record")
+              if not isinstance(station["weather"], dict):
+                  raise SystemExit("Invalid station weather data")
 
-          print(
-              f"Validated {len(data['stations'])} weather station records."
-          )
+          print(f"Validated {len(stations)} station records.")
+          print("Fetched at (Sri Lanka time):",
+                data.get("fetchedAtSriLankaDisplay"))
+          print("Latest station update:",
+                data.get("meteoLatestObservationUpdatedAt"))
           PY
 
-      - name: Commit updated weather data
+      - name: Commit and publish updated data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email \
@@ -208,7 +283,7 @@ jobs:
           git add data/meteo.json
 
           if git diff --cached --quiet; then
-            echo "Weather data has not changed; nothing to commit."
+            echo "No changes to weather data; no commit needed."
           else
             git commit -m "Update official Sri Lanka weather observations"
             git push origin HEAD:main
