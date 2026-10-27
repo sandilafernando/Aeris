@@ -112,6 +112,7 @@ export function buildRainIntelligence(hourly, nowMs) {
       totalMm: null,
       peakMm: null,
       peakTime: null,
+      peakProbabilityTime: null,
       wetHours: null,
       maxProbability: null,
       dryWindowStart: null,
@@ -128,6 +129,20 @@ export function buildRainIntelligence(hourly, nowMs) {
   for (const hour of hours) {
     if (!finite(hour.precipitation)) continue;
     if (!peak || hour.precipitation > peak.precipitation) peak = hour;
+  }
+
+  // The wettest hour and the likeliest hour are not always the same hour. Keep
+  // them separate so a headline percentage is never attributed to the wrong
+  // time.
+  let chancePeak = null;
+  for (const hour of hours) {
+    if (!finite(hour.precipitationProbability)) continue;
+    if (
+      !chancePeak ||
+      hour.precipitationProbability > chancePeak.precipitationProbability
+    ) {
+      chancePeak = hour;
+    }
   }
 
   let dryBest = { start: null, length: 0 };
@@ -149,6 +164,7 @@ export function buildRainIntelligence(hourly, nowMs) {
     totalMm: amounts.length ? amounts.reduce((sum, value) => sum + value, 0) : null,
     peakMm: peak ? peak.precipitation : null,
     peakTime: peak ? peak.timeMs : null,
+    peakProbabilityTime: chancePeak ? chancePeak.timeMs : null,
     wetHours: amounts.length
       ? hours.filter((hour) => finite(hour.precipitation) && hour.precipitation >= 0.1).length
       : null,

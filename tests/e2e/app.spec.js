@@ -57,7 +57,7 @@ test("onboarding search loads a complete forecast and refreshes", async ({ page 
 
 test("shows a loading skeleton while the first forecast is in flight", async ({ page }) => {
   await seedPlaces(page, [BERLIN]);
-  await mockOpenMeteo(page, { weatherDelayMs: 1_200 });
+  await mockOpenMeteo(page, { weatherDelayMs: 3_000 });
   await page.goto("/");
 
   const skeleton = page.getByRole("status").filter({ hasText: "Loading weather for Berlin" });

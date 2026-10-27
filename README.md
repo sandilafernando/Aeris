@@ -33,6 +33,8 @@ The onboarding screen is shown before a first place is chosen:
 
 ![Aeris onboarding screen](docs/screenshots/onboarding-light.png)
 
+Screenshots are captured from a production build against the real Open-Meteo forecast and the live DoM snapshot at the time of capture, so the values are illustrative of that moment rather than a live reading.
+
 ## Stack
 
 - **Framework:** Next.js 16.4 (App Router, Cache Components, three request-time weather route handlers)
@@ -118,7 +120,7 @@ The suite covers:
 - **Playwright tests** for onboarding, keyboard search, forecast rendering, At a glance source switching and metric persistence, manual and automatic station selection, permission-denied fallback, the labelled default outside Sri Lanka, trace rainfall, stale and unavailable observation states, the labelled NOAA AWC fallback, satellite layer switching, notification preference persistence, Weather Desk tools, refresh success and failure, saved-place management, preference persistence, initial errors, offline recovery with the saved forecast, geolocation, empty search, responsive overflow, dialog sizing and touch targets, and production service-worker caching, offline boot, install prompts, iOS instructions, and standalone detection.
 - **Accessibility scans** with axe-core on the onboarding screen, light and dark dashboards, day-detail dialog, preferences dialog, and location dialog. No automated WCAG 2.2 A/AA violations were found in the tested surfaces.
 
-Playwright intercepts Open-Meteo, the meteo snapshot route, the METAR route, and NASA GIBS with deterministic fixtures so runs do not depend on live conditions. The observation fixtures are built from the real station names and readings in `data/meteo.json` with timestamps shifted relative to the browser clock, so freshness and stale behavior can be tested at any time. The GIBS fixture is padded past the card's blank-frame threshold. Screenshots saved during the responsive run are written to `test-results/screenshots/`; selected production screenshots are checked in under `docs/screenshots/`.
+Playwright intercepts Open-Meteo, the meteo snapshot route, the METAR route, and NASA GIBS with deterministic fixtures so runs do not depend on live conditions. The observation fixtures are copied from a recorded real `data/meteo.json` snapshot (`tests/fixtures/meteo-snapshot-2026-10-26.json`) with timestamps shifted relative to the browser clock, so freshness and stale behavior can be tested at any time while the live collector keeps changing its readings. The GIBS fixture is padded past the card's blank-frame threshold. Screenshots saved during the responsive run are written to `test-results/screenshots/`; selected production screenshots are checked in under `docs/screenshots/`.
 
 These are automated checks, not a substitute for a manual screen-reader and assistive-technology audit.
 

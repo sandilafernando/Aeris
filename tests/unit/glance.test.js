@@ -16,7 +16,10 @@ import {
 import { normalizeMeteoJsonPayload } from "../../src/lib/sources/meteo-json.js";
 
 const RAW = JSON.parse(
-  await readFile(new URL("../../data/meteo.json", import.meta.url), "utf8"),
+  await readFile(
+    new URL("../fixtures/meteo-snapshot-2026-10-26.json", import.meta.url),
+    "utf8",
+  ),
 );
 const OBSERVATION_MS = Date.UTC(2026, 9, 26, 15, 0); // 20:30 Asia/Colombo
 const FRESH_NOW = OBSERVATION_MS + 60 * 60_000; // one hour later

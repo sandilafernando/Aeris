@@ -12,10 +12,15 @@ const METEO_JSON_ROUTE = "**/api/weather/meteo-json";
 const METAR_ROUTE = "**/api/weather/metar";
 const GIBS_ROUTE = "https://gibs.earthdata.nasa.gov/**";
 
-// The real 24-station DoM snapshot. Tests copy its names and readings and only
-// move `lastUpdated` so freshness behaviour is deterministic.
+// A recorded real 24-station DoM snapshot. Tests copy its names and readings
+// and only move `lastUpdated` so freshness behaviour is deterministic. The live
+// `data/meteo.json` is collected continuously and its readings change, so it
+// must never be the source of an asserted value here.
 const REAL_METEO_SNAPSHOT = JSON.parse(
-  readFileSync(path.join(process.cwd(), "data", "meteo.json"), "utf8"),
+  readFileSync(
+    path.join(process.cwd(), "tests", "fixtures", "meteo-snapshot-2026-10-26.json"),
+    "utf8",
+  ),
 );
 
 const SRI_LANKA_OFFSET_MS = (5 * 60 + 30) * 60_000;

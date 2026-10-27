@@ -10,6 +10,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated Playwright output. These are gitignored and are recreated or
+    // deleted while a test run is in progress, which makes ESLint's file walk
+    // fail with ENOENT if it scans them.
+    "test-results/**",
+    "playwright-report/**",
   ]),
 ]);
 

@@ -17,7 +17,7 @@ import ForecastConfidence from "@/components/forecast-confidence";
 import TimeMachine from "@/components/time-machine";
 import CityComparison from "@/components/city-comparison";
 import { WeatherLineIcon } from "@/components/weather-artwork";
-import { formatNumber, formatTime } from "@/lib/format";
+import { formatNumber, formatTime, localDateKey } from "@/lib/format";
 import { buildActivityGuidance, buildRainIntelligence } from "@/lib/insights";
 import { formatPrecipitation } from "@/lib/weather";
 import { usePreferences } from "@/components/preferences-provider";
@@ -73,6 +73,22 @@ function TimeRange({ start, hours, timezone }) {
   return `${formatTime(start, timezone)} – ${formatTime(end, timezone)}`;
 }
 
+/**
+ * A 24-hour window crosses midnight, so a bare clock time can point at the
+ * wrong day. Name the day whenever it is not today, in the location's timezone
+ * rather than the device's.
+ */
+function formatMoment(timestamp, timezone, now) {
+  const time = formatTime(timestamp, timezone);
+  if (!Number.isFinite(timestamp) || !Number.isFinite(now) || now <= 0) return time;
+  const today = localDateKey(now, timezone);
+  const day = localDateKey(timestamp, timezone);
+  if (!today || !day) return time;
+  if (day === today) return `Today ${time}`;
+  if (day === localDateKey(now + 86_400_000, timezone)) return `Tomorrow ${time}`;
+  return time;
+}
+
 function BriefStat({ icon: Icon, label, value, supporting }) {
   return (
     <div className="flex min-w-0 items-start gap-2 rounded-xl border border-outline-variant/50 bg-card/55 px-2.5 py-2">
@@ -113,7 +129,9 @@ function DeskBrief({ data, now }) {
           rain.maxProbability == null ? "Unavailable" : `${formatNumber(rain.maxProbability)}%`
         }
         supporting={
-          rain.peakTime ? `Around ${formatTime(rain.peakTime, data.timezone)}` : "No peak hour"
+          rain.peakProbabilityTime
+            ? formatMoment(rain.peakProbabilityTime, data.timezone, now)
+            : "No peak hour"
         }
       />
       <BriefStat
@@ -263,7 +281,7 @@ function RainPanel({ data, now }) {
             Peak hour
           </dt>
           <dd className="mt-1 font-display text-lg font-semibold">
-            {rain.peakTime ? formatTime(rain.peakTime, data.timezone) : "None"}
+            {rain.peakTime ? formatMoment(rain.peakTime, data.timezone, now) : "None"}
           </dd>
           <dd className="text-[0.62rem] text-muted-foreground">
             {rain.peakMm == null ? "No amount" : formatPrecipitation(rain.peakMm, measurementSystem)}
@@ -280,7 +298,7 @@ function RainPanel({ data, now }) {
           </dd>
           <dd className="text-[0.62rem] text-muted-foreground">
             {rain.dryWindowStart
-              ? `From ${formatTime(rain.dryWindowStart, data.timezone)}`
+              ? `From ${formatMoment(rain.dryWindowStart, data.timezone, now)}`
               : "Chance stays elevated"}
           </dd>
         </div>
