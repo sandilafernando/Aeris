@@ -24,7 +24,7 @@ import {
 } from "./sri-lanka-dom.js";
 
 export const METEO_JSON_URL =
-  "https://raw.githubusercontent.com/sandilafernando/Aeris/main/data/meteo.json";
+  "https://raw.githubusercontent.com/sandilafernando/Aeris/refs/heads/main/data/meteo.json";
 export const METEO_JSON_SOURCE_URL = "https://meteo.gov.lk/";
 export const METEO_JSON_STALE_MINUTES = 5 * 60;
 export const METEO_JSON_MAX_BYTES = 2 * 1024 * 1024;
