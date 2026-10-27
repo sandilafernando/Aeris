@@ -7,7 +7,6 @@ import {
   Database,
   Download,
   ExternalLink,
-  LayoutGrid,
   LoaderCircle,
   MapPin,
   Monitor,
@@ -32,6 +31,7 @@ import { InstallHint } from "@/components/pwa-manager";
 import { usePreferences } from "@/components/preferences-provider";
 import { useOnlineStatus } from "@/hooks/use-environment";
 import { useInstallPrompt } from "@/hooks/use-install-prompt";
+import { useBackgroundSyncSupport } from "@/hooks/use-background-sync";
 import { useMetarObservations, useMeteoJson } from "@/hooks/use-official-source";
 import {
   GLANCE_METRIC_IDS,
@@ -60,12 +60,6 @@ const WIND_OPTIONS = [
   { value: "ms", label: "m/s" },
 ];
 
-const GLANCE_SOURCE_OPTIONS = [
-  { value: "dom", label: "DoM" },
-  { value: "metar", label: "Airports" },
-  { value: "combined", label: "Both" },
-];
-
 export default function SettingsDialog({
   open,
   onOpenChange,
@@ -87,7 +81,6 @@ export default function SettingsDialog({
     setReducedEffects,
     setStationId,
     setWeatherNotifications,
-    setGlanceSource,
     setGlanceMetrics,
   } = usePreferences();
   const online = useOnlineStatus();
@@ -115,6 +108,10 @@ export default function SettingsDialog({
     notificationPermission === "denied" || notificationPermission === "unsupported";
   const notificationsActive =
     weatherNotifications && notificationPermission === "granted";
+  // True only when this browser exposes Periodic Background Sync for the
+  // registered worker, so the copy never promises background alerts it cannot
+  // deliver.
+  const backgroundChecksSupported = useBackgroundSyncSupport(open);
 
   const handleNotificationsChange = async (checked) => {
     if (!checked) {
@@ -302,25 +299,9 @@ export default function SettingsDialog({
               At a glance
             </h2>
             <div className="space-y-4 rounded-2xl border border-outline-variant bg-surface-container/55 p-3.5">
-              <div>
-                <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-                  <LayoutGrid aria-hidden="true" className="size-4 text-muted-foreground" />
-                  Observation source
-                </div>
-                <SegmentedControl
-                  label="At a glance observation source"
-                  name="settings-glance-source"
-                  options={GLANCE_SOURCE_OPTIONS}
-                  value={normalizeGlanceSource(glanceSource)}
-                  onChange={setGlanceSource}
-                />
-                <p className="mt-2 px-1 text-[0.7rem] leading-5 text-muted-foreground">
-                  DoM district stations are the default. A DoM reading older than five hours is
-                  replaced by a labelled airport report. &ldquo;Both&rdquo; keeps the two sources
-                  separate.
-                </p>
-              </div>
-
+              {/* The observation-source control lives in the At a glance widget. It was
+                  duplicated here and this copy glitched when the source switched
+                  mid-dialog, so this panel only edits metrics. */}
               <div>
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <span className="text-sm font-semibold">Metrics</span>
@@ -510,10 +491,10 @@ export default function SettingsDialog({
                     Rain and storm notifications
                   </label>
                   <p id="weather-notifications-help" className="mt-1 text-[0.7rem] leading-5 text-muted-foreground">
-                    While Aeris is open, show a browser notification when the Open-Meteo
-                    forecast expects rain, snow, or storms within the next few hours. Alerts
-                    are generated in this tab, saved only in this browser, and are not push
-                    notifications.
+                    Show a browser notification when the Open-Meteo forecast expects rain,
+                    snow, or storms within the next few hours. Alerts are computed on this
+                    device from the forecast, kept only in this browser, and are never sent
+                    from a server.
                   </p>
                 </div>
                 <Switch
@@ -537,7 +518,10 @@ export default function SettingsDialog({
                   : notificationPermission === "denied"
                     ? "Notifications are blocked for Aeris. Allow them in your browser's site settings, then reopen this panel."
                     : notificationPermission === "granted" && weatherNotifications
-                      ? "Notifications are on for this browser. Closing the tab stops them."
+                      ? "Notifications are on for this browser." +
+                        (backgroundChecksSupported
+                          ? " The installed app can also re-check while it is closed."
+                          : " Closing the tab stops them.")
                       : notificationPermission === "granted"
                         ? "Browser permission is already granted. Turn this on to receive local alerts."
                         : notificationPermission === "unknown"
@@ -546,8 +530,10 @@ export default function SettingsDialog({
               </p>
               {notificationsSupported && notificationPermission !== "denied" ? (
                 <p className="text-[0.66rem] leading-4 text-muted-foreground">
-                  Nothing is sent to a server, and no alert is generated while the tab is
-                  closed or the device is asleep.
+                  Nothing is sent to a server: the forecast is read on this device. In a
+                  tab, alerts appear only while Aeris is open. On an installed app your
+                  browser can also wake Aeris in the background where it supports Periodic
+                  Background Sync.
                 </p>
               ) : null}
             </div>
@@ -565,8 +551,8 @@ export default function SettingsDialog({
                 <ShieldCheck aria-hidden="true" className="mt-1 size-4 shrink-0 text-primary" />
                 <span>
                   Themes, units, and up to 20 saved places live in this browser&apos;s local
-                  storage. Current coordinates stay in session storage for this tab only —
-                  never in the saved list — and are cleared when the tab closes.
+                  storage, along with the last place shown so the installed app reopens
+                  there. Current coordinates are never added to the saved list.
                 </span>
               </p>
               <p className="flex gap-2.5">

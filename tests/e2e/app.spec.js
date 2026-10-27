@@ -1,5 +1,11 @@
 import { test, expect } from "@playwright/test";
-import { mockOpenMeteo, PREFS_KEY, PLACES_KEY, seedPlaces } from "./helpers";
+import {
+  ACTIVE_LOCATION_KEY,
+  mockOpenMeteo,
+  PREFS_KEY,
+  PLACES_KEY,
+  seedPlaces,
+} from "./helpers";
 import { BERLIN } from "../fixtures/weather";
 
 test("onboarding search loads a complete forecast and refreshes", async ({ page }) => {
@@ -224,7 +230,7 @@ test.describe("geolocation", () => {
     permissions: ["geolocation"],
   });
 
-  test("uses the current position for one session without saving it", async ({ page }) => {
+  test("uses the current position without adding it to the saved list", async ({ page }) => {
     await mockOpenMeteo(page);
     await page.goto("/");
     await expect(page.getByTestId("onboarding")).toBeVisible();
@@ -241,8 +247,8 @@ test.describe("geolocation", () => {
     const places = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), PLACES_KEY);
     expect(places.saved).toHaveLength(0);
 
-    // Current-location coordinates stay in session storage for this tab, so a
-    // reload keeps the forecast without adding it to the saved-places list.
+    // A reload keeps the forecast for this tab, and the place is remembered
+    // outside the saved-places list so an installed app can reopen with it.
     await page.reload();
     await expect(page.getByTestId("weather-dashboard")).toBeVisible();
     await expect(
@@ -253,6 +259,27 @@ test.describe("geolocation", () => {
       PLACES_KEY,
     );
     expect(restoredPlaces.saved).toHaveLength(0);
+
+    const remembered = await page.evaluate(
+      (key) => JSON.parse(window.localStorage.getItem(key)),
+      ACTIVE_LOCATION_KEY,
+    );
+    expect(remembered.name).toBe("Current location");
+
+    // A relaunch keeps local storage but not session storage, which is what
+    // the installed app does: it must reopen on the same place without ever
+    // adding current coordinates to the saved-places list.
+    await page.evaluate(() => window.sessionStorage.clear());
+    await page.reload();
+    await expect(page.getByTestId("weather-dashboard")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: /Weather forecast for Current location/i }),
+    ).toBeAttached();
+    const afterRelaunch = await page.evaluate(
+      (key) => JSON.parse(localStorage.getItem(key)),
+      PLACES_KEY,
+    );
+    expect(afterRelaunch.saved).toHaveLength(0);
   });
 });
 

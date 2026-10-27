@@ -2,16 +2,24 @@
 
 import { useRef, useState } from "react";
 import {
+  ArrowDownUp,
   Bike,
   CalendarRange,
+  Cloud,
   CloudRain,
   Droplets,
+  Eye,
   Footprints,
   Gauge,
   History,
   MapPinned,
+  Sun,
+  Sunrise,
+  Sunset,
+  Thermometer,
   Umbrella,
   UtensilsCrossed,
+  Wind,
 } from "lucide-react";
 import ForecastConfidence from "@/components/forecast-confidence";
 import TimeMachine from "@/components/time-machine";
@@ -19,13 +27,22 @@ import CityComparison from "@/components/city-comparison";
 import WeatherDeskScene from "@/components/weather-desk-scene";
 import { formatLocalDate, formatNumber, formatTime, localDateKey } from "@/lib/format";
 import { buildActivityGuidance, buildRainIntelligence } from "@/lib/insights";
-import { formatPrecipitation, formatTemperature } from "@/lib/weather";
+import {
+  formatPrecipitation,
+  formatTemperature,
+  formatVisibility,
+  formatWind,
+  uvIndexLabel,
+  windDirectionLabel,
+} from "@/lib/weather";
 import { usePreferences } from "@/components/preferences-provider";
 import { cn } from "@/lib/utils";
 
+/* Rain opens the desk: it is the panel people check first, so it leads the
+ * tablist and the keyboard order. */
 const TABS = [
-  { id: "plan", label: "Plan", icon: CalendarRange },
   { id: "rain", label: "Rain", icon: CloudRain },
+  { id: "plan", label: "Plan", icon: CalendarRange },
   { id: "confidence", label: "Spread", icon: Gauge },
   { id: "archive", label: "History", icon: History },
   { id: "compare", label: "Compare", icon: MapPinned },
@@ -58,7 +75,7 @@ const STATUS_STYLES = {
 function PanelHeading({ eyebrow, title, description }) {
   return (
     <div className="max-w-[70ch]">
-      <p className="eyebrow">{eyebrow}</p>
+      <p className="eyebrow text-primary">{eyebrow}</p>
       <h3 className="mt-1 font-display text-lg font-semibold tracking-[-0.03em] sm:text-xl">
         {title}
       </h3>
@@ -89,20 +106,154 @@ function formatMoment(timestamp, timezone, now) {
   return time;
 }
 
-function BriefStat({ icon: Icon, label, value, supporting }) {
+/**
+ * One flat poster tile. `variant="chip"` is used inside the illustrated band,
+ * where the background is always `--hero-bg`; `variant="tile"` is used on the
+ * card surface below it. Both pairs come from the active condition palette.
+ */
+function PosterTile({ icon: Icon, label, value, note, className, variant = "tile", onClick }) {
+  const body = (
+    <>
+      <p className="desk-tile-label flex items-center gap-1 text-[0.55rem] font-bold uppercase leading-3 tracking-[0.14em]">
+        {Icon ? <Icon aria-hidden="true" className="size-3 shrink-0" /> : null}
+        <span className="truncate">{label}</span>
+      </p>
+      <p className="mt-1 truncate font-display text-[0.92rem] font-semibold leading-5 tracking-[-0.02em]">
+        {value}
+      </p>
+      {note ? <p className="desk-tile-note truncate text-[0.6rem] leading-4">{note}</p> : null}
+    </>
+  );
+
+  const classes = cn(
+    variant === "chip" ? "desk-chip" : "desk-tile",
+    "block min-w-0 rounded-xl px-2.5 py-2 text-left",
+    className,
+  );
+
+  // A brief tile can jump straight to the panel that explains it.
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={classes}>
+        {body}
+      </button>
+    );
+  }
+
+  return <div className={classes}>{body}</div>;
+}
+
+/**
+ * Every reading the Open-Meteo current payload carries, laid out as flat
+ * poster tiles in the same palette as the illustrated band. A missing field
+ * reads "Unavailable" instead of pretending to be zero.
+ */
+function DeskDataPoints({ data }) {
+  const { temperatureUnit, windUnit, measurementSystem } = usePreferences();
+  const current = data.current || {};
+  const uv = uvIndexLabel(current.uvIndex);
+
+  const items = [
+    {
+      icon: Thermometer,
+      label: "Feels like",
+      value: Number.isFinite(current.apparentTemperature)
+        ? formatTemperature(current.apparentTemperature, temperatureUnit)
+        : "Unavailable",
+    },
+    {
+      icon: Droplets,
+      label: "Humidity",
+      value: Number.isFinite(current.humidity)
+        ? `${Math.round(current.humidity)}%`
+        : "Unavailable",
+    },
+    {
+      icon: Wind,
+      label: "Wind",
+      value: formatWind(current.windSpeed, windUnit),
+      note: [
+        windDirectionLabel(current.windDirection, true),
+        Number.isFinite(current.windGust)
+          ? `gusts ${formatWind(current.windGust, windUnit)}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    },
+    {
+      icon: Gauge,
+      label: "Pressure",
+      value: Number.isFinite(current.pressure)
+        ? `${Math.round(current.pressure)} hPa`
+        : "Unavailable",
+    },
+    {
+      icon: Sun,
+      label: "UV index",
+      value: Number.isFinite(current.uvIndex) ? current.uvIndex.toFixed(1) : "Unavailable",
+      note: uv.label,
+    },
+    {
+      icon: Eye,
+      label: "Visibility",
+      value: formatVisibility(current.visibility, measurementSystem),
+    },
+    {
+      icon: Cloud,
+      label: "Cloud cover",
+      value: Number.isFinite(current.cloudCover)
+        ? `${Math.round(current.cloudCover)}%`
+        : "Unavailable",
+    },
+    {
+      icon: CloudRain,
+      label: "Rain now",
+      value: Number.isFinite(current.precipitation)
+        ? formatPrecipitation(current.precipitation, measurementSystem)
+        : "Unavailable",
+    },
+    {
+      icon: Sunrise,
+      label: "Sunrise",
+      value: Number.isFinite(current.sunrise)
+        ? formatTime(current.sunrise, data.timezone)
+        : "Unavailable",
+    },
+    {
+      icon: Sunset,
+      label: "Sunset",
+      value: Number.isFinite(current.sunset)
+        ? formatTime(current.sunset, data.timezone)
+        : "Unavailable",
+    },
+    {
+      icon: ArrowDownUp,
+      label: "Today's range",
+      value: Number.isFinite(current.high)
+        ? formatTemperature(current.high, temperatureUnit)
+        : "Unavailable",
+      note: Number.isFinite(current.low)
+        ? `Low ${formatTemperature(current.low, temperatureUnit)}`
+        : "Low unavailable",
+    },
+  ];
+
   return (
-    <div className="flex min-w-0 items-start gap-2 rounded-xl border border-outline-variant/50 bg-card/55 px-2.5 py-2">
-      <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full bg-card/90 text-primary shadow-sm">
-        <Icon aria-hidden="true" className="size-3" />
-      </span>
-      <div className="min-w-0">
-        <p className="text-[0.56rem] font-bold uppercase leading-3 tracking-[0.1em] text-muted-foreground">
-          {label}
-        </p>
-        <p className="mt-0.5 truncate text-[0.8rem] font-semibold leading-4">{value}</p>
-        <p className="truncate text-[0.6rem] leading-4 text-muted-foreground">{supporting}</p>
-      </div>
-    </div>
+    <ul className="relative mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+      {items.map((item) => (
+        <li key={item.label} className="min-w-0">
+          <PosterTile
+            icon={item.icon}
+            label={item.label}
+            value={item.value}
+            note={item.note}
+            className="h-full"
+            variant="chip"
+          />
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -111,7 +262,7 @@ function BriefStat({ icon: Icon, label, value, supporting }) {
  * forecast as the panels, so it cannot drift from them, and it never claims a
  * dry window that the hourly probabilities do not support.
  */
-function DeskBrief({ data, now }) {
+function DeskBrief({ data, now, onJump }) {
   const { measurementSystem } = usePreferences();
   const guidance = buildActivityGuidance(data.hourly, now);
   const rain = buildRainIntelligence(data.hourly, now);
@@ -122,21 +273,23 @@ function DeskBrief({ data, now }) {
 
   return (
     <div className="relative mt-3 grid gap-2 sm:grid-cols-3">
-      <BriefStat
+      <PosterTile
         icon={CloudRain}
         label="Rain peak"
+        onClick={() => onJump?.("rain")}
         value={
           rain.maxProbability == null ? "Unavailable" : `${formatNumber(rain.maxProbability)}%`
         }
-        supporting={
+        note={
           rain.peakProbabilityTime
             ? formatMoment(rain.peakProbabilityTime, data.timezone, now)
             : "No peak hour"
         }
       />
-      <BriefStat
+      <PosterTile
         icon={Footprints}
         label="Best outdoor window"
+        onClick={() => onJump?.("plan")}
         value={
           best
             ? TimeRange({
@@ -146,17 +299,18 @@ function DeskBrief({ data, now }) {
               })
             : "No strong window"
         }
-        supporting={best ? best.label : "Every activity is limited"}
+        note={best ? best.label : "Every activity is limited"}
       />
-      <BriefStat
+      <PosterTile
         icon={Umbrella}
         label="Expected rain"
+        onClick={() => onJump?.("rain")}
         value={
           rain.totalMm == null
             ? "Unavailable"
             : formatPrecipitation(rain.totalMm, measurementSystem)
         }
-        supporting="Next 24 hours"
+        note="Next 24 hours"
       />
     </div>
   );
@@ -181,15 +335,11 @@ function PlanPanel({ data, now }) {
           return (
             <article
               key={activity.key}
-              className="desk-card-enter group relative isolate flex min-w-0 flex-col overflow-hidden rounded-2xl border border-outline-variant/70 bg-gradient-to-br from-surface-container/70 via-card/60 to-surface-container/35 p-3.5 transition-[transform,border-color,box-shadow] duration-300 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_14px_30px_-24px_var(--primary)]"
+              className="desk-card desk-card-enter group relative isolate flex min-w-0 flex-col overflow-hidden rounded-2xl p-3.5 transition-transform duration-300 hover:-translate-y-0.5"
               style={{ animationDelay: `${index * 65}ms` }}
             >
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute -right-7 -top-7 -z-10 size-20 rounded-full bg-primary-container/35 blur-xl transition-transform duration-500 group-hover:scale-125"
-              />
               <div className="relative flex items-start justify-between gap-2">
-                <span className="grid size-9 place-items-center rounded-full bg-card/90 text-primary shadow-sm transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-105">
+                <span className="grid size-9 place-items-center rounded-full bg-card text-primary shadow-sm">
                   <Icon aria-hidden="true" className="size-4" />
                 </span>
                 <span
@@ -256,8 +406,8 @@ function RainPanel({ data, now }) {
       />
 
       <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <div className="rounded-2xl border border-outline-variant/50 bg-gradient-to-br from-surface-container/80 to-card/40 px-3 py-2.5 transition-[transform,border-color] duration-300 hover:-translate-y-0.5 hover:border-primary/25">
-          <dt className="text-[0.6rem] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+        <div className="desk-tile rounded-2xl px-3 py-2.5 transition-transform duration-300 hover:-translate-y-0.5">
+          <dt className="desk-tile-label text-[0.6rem] font-bold uppercase tracking-[0.12em]">
             Expected total
           </dt>
           <dd className="mt-1 font-display text-lg font-semibold">
@@ -266,8 +416,8 @@ function RainPanel({ data, now }) {
               : formatPrecipitation(rain.totalMm, measurementSystem)}
           </dd>
         </div>
-        <div className="rounded-2xl border border-outline-variant/50 bg-gradient-to-br from-surface-container/80 to-card/40 px-3 py-2.5 transition-[transform,border-color] duration-300 hover:-translate-y-0.5 hover:border-primary/25">
-          <dt className="text-[0.6rem] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+        <div className="desk-tile rounded-2xl px-3 py-2.5 transition-transform duration-300 hover:-translate-y-0.5">
+          <dt className="desk-tile-label text-[0.6rem] font-bold uppercase tracking-[0.12em]">
             Peak chance
           </dt>
           <dd className="mt-1 font-display text-lg font-semibold">
@@ -276,27 +426,25 @@ function RainPanel({ data, now }) {
               : `${formatNumber(rain.maxProbability)}%`}
           </dd>
         </div>
-        <div className="rounded-2xl border border-outline-variant/50 bg-gradient-to-br from-surface-container/80 to-card/40 px-3 py-2.5 transition-[transform,border-color] duration-300 hover:-translate-y-0.5 hover:border-primary/25">
-          <dt className="text-[0.6rem] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+        <div className="desk-tile rounded-2xl px-3 py-2.5 transition-transform duration-300 hover:-translate-y-0.5">
+          <dt className="desk-tile-label text-[0.6rem] font-bold uppercase tracking-[0.12em]">
             Peak hour
           </dt>
           <dd className="mt-1 font-display text-lg font-semibold">
             {rain.peakTime ? formatMoment(rain.peakTime, data.timezone, now) : "None"}
           </dd>
-          <dd className="text-[0.62rem] text-muted-foreground">
+          <dd className="desk-tile-note text-[0.62rem]">
             {rain.peakMm == null ? "No amount" : formatPrecipitation(rain.peakMm, measurementSystem)}
           </dd>
         </div>
-        <div className="rounded-2xl border border-outline-variant/50 bg-gradient-to-br from-surface-container/80 to-card/40 px-3 py-2.5 transition-[transform,border-color] duration-300 hover:-translate-y-0.5 hover:border-primary/25">
-          <dt className="text-[0.6rem] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+        <div className="desk-tile rounded-2xl px-3 py-2.5 transition-transform duration-300 hover:-translate-y-0.5">
+          <dt className="desk-tile-label text-[0.6rem] font-bold uppercase tracking-[0.12em]">
             Driest stretch
           </dt>
           <dd className="mt-1 font-display text-lg font-semibold">
-            {rain.dryWindowLength
-              ? `${rain.dryWindowLength} h`
-              : "No dry stretch"}
+            {rain.dryWindowLength ? `${rain.dryWindowLength} h` : "No dry stretch"}
           </dd>
-          <dd className="text-[0.62rem] text-muted-foreground">
+          <dd className="desk-tile-note text-[0.62rem]">
             {rain.dryWindowStart
               ? `From ${formatMoment(rain.dryWindowStart, data.timezone, now)}`
               : "Chance stays elevated"}
@@ -305,7 +453,7 @@ function RainPanel({ data, now }) {
       </dl>
 
       {rain.hours.length ? (
-        <div className="mt-4 rounded-2xl border border-outline-variant/70 bg-gradient-to-b from-card/70 to-secondary-container/25 px-3 pb-2 pt-3">
+        <div className="desk-chart mt-4 rounded-2xl border px-3 pb-2 pt-3">
           <div
             className="flex h-28 items-end gap-1"
             role="img"
@@ -322,15 +470,11 @@ function RainPanel({ data, now }) {
                 >
                   <div
                     aria-hidden="true"
-                    className={cn(
-                      "w-full rounded-t-[0.3rem] transition-[height,background-color] duration-300",
-                      chance >= 60
-                        ? "bg-primary"
-                        : chance >= 30
-                          ? "bg-primary/60"
-                          : "bg-primary/25",
-                    )}
-                    style={{ height: `${Math.max(3, (chance / probabilityMax) * 100)}%` }}
+                    className="w-full rounded-t-[0.3rem] bg-primary transition-[height,opacity] duration-300"
+                    style={{
+                      height: `${Math.max(3, (chance / probabilityMax) * 100)}%`,
+                      opacity: chance >= 60 ? 1 : chance >= 30 ? 0.62 : 0.3,
+                    }}
                   />
                   <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-popover px-1.5 py-1 text-[0.6rem] text-popover-foreground shadow-sm ring-1 ring-border group-hover:block">
                     {formatTime(hour.timeMs, data.timezone)} · {Math.round(chance)}%
@@ -368,7 +512,7 @@ function RainPanel({ data, now }) {
 }
 
 export default function WeatherDesk({ data, location, savedLocations = [], now, onSelectPlace }) {
-  const [active, setActive] = useState("plan");
+  const [active, setActive] = useState("rain");
   const tabRefs = useRef([]);
 
   function onKeyDown(event) {
@@ -395,8 +539,8 @@ export default function WeatherDesk({ data, location, savedLocations = [], now, 
       className="surface-card relative min-w-0 overflow-hidden"
       aria-labelledby="weather-desk-heading"
     >
-      {/* Illustrated poster band: big reading, place, and a flat landscape that
-          recolours with the real condition palette. */}
+      {/* Illustrated poster band: big reading, place, the full data strip, and a
+          flat landscape that recolours with the real condition palette. */}
       <div
         className="relative min-h-[15.5rem] overflow-hidden px-5 pb-6 pt-5 sm:min-h-[17.5rem] sm:px-7 sm:pt-6"
         style={{ backgroundColor: "var(--hero-bg)", color: "var(--hero-ink)" }}
@@ -452,78 +596,78 @@ export default function WeatherDesk({ data, location, savedLocations = [], now, 
             {data.timezone || "local"}.
           </p>
         </div>
+
+        <DeskDataPoints data={data} />
       </div>
 
       <div className="relative bg-card px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
-        <DeskBrief data={data} now={now} />
+        <DeskBrief data={data} now={now} onJump={setActive} />
 
-      <div
-        role="tablist"
-        aria-label="Weather desk tools"
-        onKeyDown={onKeyDown}
-        className="relative mt-4 flex gap-1 overflow-x-auto rounded-[1.2rem] border border-outline-variant/60 bg-surface-container/55 p-1 shadow-[inset_0_1px_2px_rgba(0,0,0,0.035)]"
-      >
-        {TABS.map((tab, index) => {
-          const Icon = tab.icon;
-          const selected = active === tab.id;
-          return (
-            <button
-              key={tab.id}
-              ref={(node) => {
-                tabRefs.current[index] = node;
-              }}
-              type="button"
-              role="tab"
-              id={`desk-tab-${tab.id}`}
-              aria-selected={selected}
-              aria-controls={`desk-panel-${tab.id}`}
-              tabIndex={selected ? 0 : -1}
-              onClick={() => setActive(tab.id)}
-              className={cn(
-                "inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 text-[0.7rem] font-semibold transition-[background-color,color,box-shadow,transform] duration-200 sm:px-3.5",
-                selected
-                  ? "bg-gradient-to-br from-card to-primary-container/30 text-foreground shadow-[0_2px_0_rgba(0,0,0,0.035),0_8px_20px_-16px_var(--primary)]"
-                  : "text-muted-foreground hover:-translate-y-px hover:bg-card/60 hover:text-foreground",
-              )}
-            >
-              <Icon
-                aria-hidden="true"
+        <div
+          role="tablist"
+          aria-label="Weather desk tools"
+          onKeyDown={onKeyDown}
+          className="desk-tabs relative mt-4 flex gap-1 overflow-x-auto rounded-[1.2rem] p-1"
+        >
+          {TABS.map((tab, index) => {
+            const Icon = tab.icon;
+            const selected = active === tab.id;
+            return (
+              <button
+                key={tab.id}
+                ref={(node) => {
+                  tabRefs.current[index] = node;
+                }}
+                type="button"
+                role="tab"
+                id={`desk-tab-${tab.id}`}
+                aria-selected={selected}
+                aria-controls={`desk-panel-${tab.id}`}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => setActive(tab.id)}
                 className={cn(
-                  "size-3.5 shrink-0 transition-transform duration-200",
-                  selected && "scale-110",
+                  "desk-tab inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 text-[0.7rem] font-semibold transition-[background-color,color,transform] duration-200 sm:px-3.5",
+                  selected && "scale-[1.01]",
                 )}
-              />
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+              >
+                <Icon
+                  aria-hidden="true"
+                  className={cn(
+                    "size-3.5 shrink-0 transition-transform duration-200",
+                    selected && "scale-110",
+                  )}
+                />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
 
-      <div
-        key={active}
-        role="tabpanel"
-        id={`desk-panel-${active}`}
-        aria-labelledby={`desk-tab-${active}`}
-        tabIndex={0}
-        className="desk-panel-enter relative mt-4 rounded-[1.35rem] border border-outline-variant/55 bg-gradient-to-br from-card/70 via-card/45 to-surface-container/25 p-3.5 outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-4"
-      >
-        {active === "plan" ? <PlanPanel data={data} now={now} /> : null}
-        {active === "rain" ? <RainPanel data={data} now={now} /> : null}
-        {active === "confidence" ? (
-          <ForecastConfidence location={location} timezone={data.timezone} />
-        ) : null}
-        {active === "archive" ? (
-          <TimeMachine location={location} timezone={data.timezone} now={now} />
-        ) : null}
-        {active === "compare" ? (
-          <CityComparison
-            currentLocation={location}
-            savedLocations={savedLocations}
-            currentWeather={data}
-            onSelectPlace={onSelectPlace}
-          />
-        ) : null}
-      </div>
+        <div
+          key={active}
+          role="tabpanel"
+          id={`desk-panel-${active}`}
+          aria-labelledby={`desk-tab-${active}`}
+          tabIndex={0}
+          className="desk-panel desk-panel-enter relative mt-4 rounded-[1.35rem] p-3.5 outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-4"
+        >
+          {active === "rain" ? <RainPanel data={data} now={now} /> : null}
+          {active === "plan" ? <PlanPanel data={data} now={now} /> : null}
+          {active === "confidence" ? (
+            <ForecastConfidence location={location} timezone={data.timezone} />
+          ) : null}
+          {active === "archive" ? (
+            <TimeMachine location={location} timezone={data.timezone} now={now} />
+          ) : null}
+          {active === "compare" ? (
+            <CityComparison
+              currentLocation={location}
+              savedLocations={savedLocations}
+              currentWeather={data}
+              onSelectPlace={onSelectPlace}
+            />
+          ) : null}
+        </div>
       </div>
     </section>
   );

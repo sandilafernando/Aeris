@@ -270,9 +270,10 @@ test("the source selector and metric choices persist across the widget and Prefe
 
   await page.getByRole("button", { name: "Preferences" }).click();
   const dialog = page.getByRole("dialog");
-  await expect(
-    dialog.locator('input[name="settings-glance-source"][value="combined"]'),
-  ).toBeChecked();
+  // The observation-source control lives only in the At a glance widget now:
+  // the duplicated copy in Preferences glitched when the source switched.
+  await expect(dialog.locator('input[name="settings-glance-source"]')).toHaveCount(0);
+  await expect(dialog.getByText("Metrics", { exact: true })).toBeVisible();
   await expect(
     page.locator('input[name="glance-source"][value="combined"]'),
   ).toBeChecked();

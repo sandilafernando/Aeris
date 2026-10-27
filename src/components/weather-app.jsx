@@ -23,13 +23,16 @@ import { usePreferences } from "@/components/preferences-provider";
 import { useNow, useOnlineStatus } from "@/hooks/use-environment";
 import { useWeather } from "@/hooks/use-weather";
 import { useWeatherNotifications } from "@/hooks/use-weather-notifications";
+import { syncBackgroundWeatherChecks } from "@/hooks/use-background-sync";
 import { formatTime, relativeUpdateLabel } from "@/lib/format";
 import {
   normalizePlace,
   placeKey,
   placeLabel,
+  readActiveLocation,
   readSavedPlaces,
   readSessionLocation,
+  saveActiveLocation,
   savePlacesState,
   saveSessionLocation,
 } from "@/lib/storage";
@@ -55,6 +58,7 @@ export default function WeatherApp() {
   const [activeId, setActiveId] = useState(null);
   const [sessionLocation, setSessionLocation] = useState(null);
   const [sessionActive, setSessionActive] = useState(false);
+  const [rememberedPlace, setRememberedPlace] = useState(null);
   const [storageReady, setStorageReady] = useState(false);
   const [locationsOpen, setLocationsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -66,11 +70,23 @@ export default function WeatherApp() {
   useEffect(() => {
     const stored = readSavedPlaces();
     const session = readSessionLocation();
+    const remembered = readActiveLocation();
     const restoreSession = Boolean(session?.active && session?.place);
+    const rememberedOutsideSavedList =
+      remembered && !stored.saved.some((place) => place.id === remembered.id);
     setSavedLocations(stored.saved);
     setSessionLocation(session?.place || null);
     setSessionActive(restoreSession);
-    setActiveId(restoreSession ? session.place.id : stored.activeId);
+    setRememberedPlace(remembered);
+    // Reopen where the app was last left, including a current-location place
+    // that is deliberately absent from the saved-places list.
+    setActiveId(
+      restoreSession
+        ? session.place.id
+        : rememberedOutsideSavedList
+          ? remembered.id
+          : (stored.activeId ?? remembered?.id ?? null),
+    );
     setStorageReady(true);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -87,12 +103,19 @@ export default function WeatherApp() {
 
   const activeLocation = useMemo(() => {
     if (sessionActive && sessionLocation) return sessionLocation;
-    const savedActive =
-      savedLocations.find((place) => place.id === activeId) ||
-      savedLocations[0] ||
-      null;
-    return savedActive || sessionLocation || null;
-  }, [activeId, savedLocations, sessionActive, sessionLocation]);
+    const savedActive = savedLocations.find((place) => place.id === activeId);
+    if (savedActive) return savedActive;
+    // The remembered place can be the current-location record, which is never
+    // in the saved list, so it has to win over falling back to the first city.
+    if (rememberedPlace && rememberedPlace.id === activeId) return rememberedPlace;
+    return savedLocations[0] || sessionLocation || rememberedPlace || null;
+  }, [activeId, rememberedPlace, savedLocations, sessionActive, sessionLocation]);
+
+  // Remember the place on screen so an installed app reopens with it.
+  useEffect(() => {
+    if (!storageReady) return;
+    saveActiveLocation(activeLocation);
+  }, [activeLocation, storageReady]);
 
   const weather = useWeather(activeLocation);
   const refreshWeather = weather.refresh;
@@ -106,6 +129,13 @@ export default function WeatherApp() {
     location: activeLocation,
     now,
   });
+
+  // Keep the service worker's background check in step with the preference and
+  // the place on screen, so the installed app can alert while it is closed.
+  useEffect(() => {
+    if (!storageReady) return;
+    syncBackgroundWeatherChecks({ enabled: weatherNotifications, place: activeLocation });
+  }, [activeLocation, storageReady, weatherNotifications]);
 
   useEffect(() => {
     const palette = resolvePalette(paletteGroup, paletteDay, resolvedTheme);

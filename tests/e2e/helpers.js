@@ -504,6 +504,7 @@ export async function mockOpenMeteo(page, options = {}) {
 
 export const PREFS_KEY = "aeris:preferences:v1";
 export const PLACES_KEY = "aeris:places:v1";
+export const ACTIVE_LOCATION_KEY = "aeris:active-location:v1";
 
 export async function openCityFromOnboarding(page, query = "Ber", result = "Berlin") {
   await page.getByRole("combobox", { name: /search for a city/i }).fill(query);

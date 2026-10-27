@@ -274,6 +274,34 @@ export function saveSessionLocation(place, active = false) {
   }
 }
 
+/*
+ * Last active location.
+ *
+ * The installed app reopens with the place that was last shown, including the
+ * current-location place, so a home-screen launch never starts on onboarding
+ * again. It is a separate single-entry record: the saved-places list is
+ * unchanged and current coordinates still never enter it.
+ */
+export const ACTIVE_LOCATION_KEY = "aeris:active-location:v1";
+
+export function readActiveLocation() {
+  return normalizePlace(readJson(ACTIVE_LOCATION_KEY, null));
+}
+
+export function saveActiveLocation(place) {
+  const normalized = normalizePlace(place);
+  if (!normalized) {
+    if (typeof window === "undefined") return false;
+    try {
+      window.localStorage.removeItem(ACTIVE_LOCATION_KEY);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return writeJson(ACTIVE_LOCATION_KEY, normalized);
+}
+
 export function clearSessionLocation() {
   if (typeof window === "undefined") return false;
   try {

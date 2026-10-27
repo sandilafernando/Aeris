@@ -7,11 +7,19 @@
  * Bump VERSION whenever the precache list or caching rules change. Old Aeris
  * caches are removed on activate.
  */
-const VERSION = "v3";
+const VERSION = "v4";
 const CACHE_PREFIX = "aeris-";
 const SHELL_CACHE = `${CACHE_PREFIX}shell-${VERSION}`;
 const STATIC_CACHE = `${CACHE_PREFIX}static-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
+
+// Holds { enabled, place } written by the page, plus the last alert key. The
+// worker cannot read localStorage, and this cache must survive activation, so
+// the activate cleanup below exempts it.
+const NOTIFY_CONFIG_CACHE = "aeris-notify-config";
+const NOTIFY_CONFIG_URL = "/notify-config";
+const LAST_ALERT_URL = "/last-alert";
+const BACKGROUND_CHECK_TAG = "aeris-precipitation-check";
 
 // Only stable, unhashed files belong here. Hashed Next.js bundles are cached
 // at runtime instead, because their filenames change with every build.
@@ -98,7 +106,8 @@ self.addEventListener("activate", (event) => {
             (key) =>
               key.startsWith(CACHE_PREFIX) &&
               key !== SHELL_CACHE &&
-              key !== STATIC_CACHE,
+              key !== STATIC_CACHE &&
+              key !== NOTIFY_CONFIG_CACHE,
           )
           .map((key) => caches.delete(key)),
       );
@@ -231,6 +240,175 @@ function isCacheable(response) {
   );
 }
 
+/*
+ * Background precipitation check.
+ *
+ * The page stores { enabled, place } in NOTIFY_CONFIG_CACHE, because this
+ * worker has no access to localStorage. On a Periodic Background Sync the
+ * worker fetches the Open-Meteo forecast itself and shows a local
+ * notification when the next few hours turn wet. Nothing is pushed from a
+ * server, no subscription is created, and a repeated forecast hour is
+ * alerted only once.
+ */
+self.addEventListener("periodicsync", (event) => {
+  if (event.tag !== BACKGROUND_CHECK_TAG) return;
+  event.waitUntil(runBackgroundCheck());
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of windows) {
+        if ("focus" in client) return client.focus();
+      }
+      return self.clients.openWindow("/");
+    })(),
+  );
+});
+
+async function readNotifyConfig() {
+  try {
+    const cache = await caches.open(NOTIFY_CONFIG_CACHE);
+    const response = await cache.match(NOTIFY_CONFIG_URL);
+    if (!response) return null;
+    const config = await response.json();
+    if (!config || config.enabled !== true) return null;
+    const place = config.place;
+    if (!place || !Number.isFinite(Number(place.latitude))) return null;
+    if (!Number.isFinite(Number(place.longitude))) return null;
+    return config;
+  } catch {
+    return null;
+  }
+}
+
+async function readLastAlert() {
+  try {
+    const cache = await caches.open(NOTIFY_CONFIG_CACHE);
+    const response = await cache.match(LAST_ALERT_URL);
+    return response ? await response.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeLastAlert(record) {
+  try {
+    const cache = await caches.open(NOTIFY_CONFIG_CACHE);
+    await cache.put(LAST_ALERT_URL, new Response(JSON.stringify(record)));
+  } catch {
+    // A failed dedupe write can only risk a repeated alert, never a wrong one.
+  }
+}
+
+const WINTER_CODES = new Set([56, 57, 66, 67, 71, 73, 75, 77, 85, 86]);
+const STORM_CODES = new Set([95, 96, 97, 99]);
+
+function backgroundForecastUrl(place) {
+  const params = new URLSearchParams({
+    latitude: String(Number(place.latitude)),
+    longitude: String(Number(place.longitude)),
+    current: "precipitation,weather_code",
+    hourly: "precipitation_probability,precipitation,weather_code",
+    timezone: "auto",
+    timeformat: "unixtime",
+    forecast_days: "2",
+  });
+  return `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
+}
+
+/**
+ * First wet hour in the next four hours, using the same thresholds as the
+ * in-page alert: a chance of 50% or more, or 0.1 mm or more. Already-wet
+ * conditions are not an alert, because they are already on screen.
+ */
+function findOnset(payload, nowMs) {
+  const hourly = payload?.hourly;
+  if (!Array.isArray(hourly?.time)) return null;
+
+  const currentPrecipitation = Number(payload?.current?.precipitation);
+  if (Number.isFinite(currentPrecipitation) && currentPrecipitation > 0.05) return null;
+
+  for (let index = 0; index < hourly.time.length; index += 1) {
+    const timeMs = Number(hourly.time[index]) * 1000;
+    if (!Number.isFinite(timeMs)) continue;
+    if (timeMs < nowMs - 30 * 60_000) continue;
+    if (timeMs > nowMs + 4 * 3_600_000) break;
+
+    const probability = Number(hourly.precipitation_probability?.[index]);
+    const amount = Number(hourly.precipitation?.[index]);
+    const code = Number(hourly.weather_code?.[index]);
+    const wet =
+      (Number.isFinite(probability) && probability >= 50) ||
+      (Number.isFinite(amount) && amount >= 0.1);
+    if (!wet) continue;
+
+    return {
+      timeMs,
+      minutesAhead: Math.max(0, Math.round((timeMs - nowMs) / 60_000)),
+      kind: WINTER_CODES.has(code) ? "Snow" : STORM_CODES.has(code) ? "Storms" : "Rain",
+    };
+  }
+
+  return null;
+}
+
+async function runBackgroundCheck() {
+  const config = await readNotifyConfig();
+  if (!config) return;
+
+  let payload;
+  try {
+    const response = await fetch(backgroundForecastUrl(config.place), {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!response.ok) return;
+    payload = await response.json();
+  } catch {
+    // Offline or blocked: stay quiet rather than guess at the weather.
+    return;
+  }
+
+  const nowMs = Date.now();
+  const onset = findOnset(payload, nowMs);
+  if (!onset) return;
+
+  const alertKey = `${Number(config.place.latitude)},${Number(config.place.longitude)}:${new Date(
+    onset.timeMs,
+  ).toISOString().slice(0, 13)}`;
+  const last = await readLastAlert();
+  if (last?.key === alertKey) return;
+
+  const name = config.place.name || "";
+  const place = !name || name === "Current location" ? "your location" : name;
+  const title =
+    onset.kind === "Snow"
+      ? `Snow likely soon in ${place}`
+      : onset.kind === "Storms"
+        ? `Storms likely soon in ${place}`
+        : `Rain likely soon in ${place}`;
+  const timing =
+    onset.minutesAhead <= 30
+      ? "within the next half hour"
+      : `in about ${Math.round(onset.minutesAhead / 30) * 30} minutes`;
+
+  try {
+    await self.registration.showNotification(title, {
+      body: `${onset.kind} ${timing}. Open Aeris for hourly timing and the official station reading.`,
+      tag: `aeris-precipitation-${alertKey}`,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      data: { url: "/" },
+    });
+    await writeLastAlert({ key: alertKey, at: nowMs });
+  } catch {
+    // Permission may have been revoked; the page reports that instead.
+  }
+}
+
 self.addEventListener("message", (event) => {
   const data = event.data;
 
@@ -248,7 +426,7 @@ self.addEventListener("message", (event) => {
         .then((keys) =>
           Promise.all(
             keys
-              .filter((key) => key.startsWith(CACHE_PREFIX))
+              .filter((key) => key.startsWith(CACHE_PREFIX) && key !== NOTIFY_CONFIG_CACHE)
               .map((key) => caches.delete(key)),
           ),
         )
