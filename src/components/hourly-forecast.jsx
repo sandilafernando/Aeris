@@ -63,7 +63,7 @@ function HourlyForecast({ hourly, timezone, locationName }) {
 
   return (
     <section
-      className="surface-card p-4 sm:p-5"
+      className="surface-card flex h-full flex-col p-4 sm:p-5"
       aria-labelledby="hourly-heading"
       data-testid="hourly-forecast"
     >
@@ -110,7 +110,7 @@ function HourlyForecast({ hourly, timezone, locationName }) {
         ref={scrollRef}
         tabIndex={0}
         aria-label={`Hourly forecast for ${locationName}. Scroll horizontally for all ${hourly.length} hours.`}
-        className="hourly-scroll -mx-1 mt-4 flex snap-x gap-2 overflow-x-auto px-1 pb-2.5 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-card"
+        className="hourly-scroll -mx-1 mt-4 flex flex-1 snap-x items-stretch gap-2 overflow-x-auto px-1 py-1 pb-2.5 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-card"
       >
         {hourly.map((hour, index) => {
           const isNow = index === 0;
@@ -120,8 +120,9 @@ function HourlyForecast({ hourly, timezone, locationName }) {
           return (
             <li
               key={hour.time}
+              data-condition={hour.condition.group}
               className={cn(
-                "relative flex min-h-[7.65rem] w-[4.85rem] shrink-0 snap-start flex-col items-center rounded-2xl border px-2 py-3 sm:w-[5.35rem]",
+                "hour-tile relative flex min-h-[7.65rem] w-[4.85rem] shrink-0 snap-start flex-col items-center justify-between rounded-2xl border px-2 py-3 sm:w-[5.35rem]",
                 isNow
                   ? "border-primary/25 bg-primary-container/75 text-on-primary-container"
                   : "border-outline-variant/65 bg-surface-container/45",
@@ -133,11 +134,9 @@ function HourlyForecast({ hourly, timezone, locationName }) {
               >
                 {isNow ? "Now" : formatHour(hour.time, timezone)}
               </time>
-              <WeatherLineIcon
-                group={hour.condition.group}
-                isDay={hour.isDay}
-                className="mt-2 size-7"
-              />
+              <span className="hour-icon mt-2 inline-flex will-change-transform">
+                <WeatherLineIcon group={hour.condition.group} isDay={hour.isDay} className="size-7" />
+              </span>
               <span className="number-tabular mt-1.5 font-display text-[1.2rem] font-semibold leading-none">
                 {formatTemperature(hour.temperature, temperatureUnit)}
               </span>

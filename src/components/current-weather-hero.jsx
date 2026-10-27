@@ -37,6 +37,7 @@ export default function CurrentWeatherHero({ data, location, now }) {
         isDay={current.isDay}
         intensity="subtle"
       />
+      <div aria-hidden="true" className="hero-ambient" />
       <h2 id="current-weather-heading" className="sr-only">
         Current conditions in {location.name}
       </h2>
@@ -135,7 +136,7 @@ export default function CurrentWeatherHero({ data, location, now }) {
         </div>
 
         <div className="relative -my-2 flex items-center justify-center sm:my-0">
-          <div className="mx-auto w-full max-w-[22rem]">
+          <div className="hero-art-float mx-auto w-full max-w-[22rem]">
             <WeatherHeroArt
               key={conditionKey}
               group={current.condition.group}

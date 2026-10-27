@@ -16,10 +16,10 @@ import {
 import ForecastConfidence from "@/components/forecast-confidence";
 import TimeMachine from "@/components/time-machine";
 import CityComparison from "@/components/city-comparison";
-import { WeatherLineIcon } from "@/components/weather-artwork";
-import { formatNumber, formatTime, localDateKey } from "@/lib/format";
+import WeatherDeskScene from "@/components/weather-desk-scene";
+import { formatLocalDate, formatNumber, formatTime, localDateKey } from "@/lib/format";
 import { buildActivityGuidance, buildRainIntelligence } from "@/lib/insights";
-import { formatPrecipitation } from "@/lib/weather";
+import { formatPrecipitation, formatTemperature } from "@/lib/weather";
 import { usePreferences } from "@/components/preferences-provider";
 import { cn } from "@/lib/utils";
 
@@ -384,49 +384,78 @@ export default function WeatherDesk({ data, location, savedLocations = [], now, 
     tabRefs.current[nextIndex]?.focus();
   }
 
-  const condition = data.current?.condition?.group || "partly";
+  const { temperatureUnit } = usePreferences();
+  const conditionGroup = data.current?.condition?.group || "partly";
+  const conditionLabel = data.current?.condition?.label || "Conditions unavailable";
   const isDay = data.current?.isDay ?? true;
+  const temperature = formatTemperature(data.current?.temperature, temperatureUnit);
 
   return (
     <section
-      className="surface-card relative min-w-0 overflow-hidden bg-gradient-to-br from-card/95 via-card/90 to-secondary-container/20 p-4 sm:p-5"
+      className="surface-card relative min-w-0 overflow-hidden"
       aria-labelledby="weather-desk-heading"
     >
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-20 -top-24 size-56 rounded-full bg-primary-container/35 blur-3xl"
-      />
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute -bottom-28 -left-16 size-52 rounded-full bg-tertiary-container/20 blur-3xl"
-      />
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-primary/25 to-transparent"
-      />
-
-      <div className="relative flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="grid size-12 shrink-0 place-items-center rounded-2xl border border-outline-variant/60 bg-card/75 text-primary shadow-sm">
-            <WeatherLineIcon group={condition} isDay={isDay} className="size-7" />
-          </span>
-          <div className="min-w-0">
-            <p className="eyebrow">Weather desk</p>
+      {/* Illustrated poster band: big reading, place, and a flat landscape that
+          recolours with the real condition palette. */}
+      <div
+        className="relative min-h-[15.5rem] overflow-hidden px-5 pb-6 pt-5 sm:min-h-[17.5rem] sm:px-7 sm:pt-6"
+        style={{ backgroundColor: "var(--hero-bg)", color: "var(--hero-ink)" }}
+      >
+        <WeatherDeskScene group={conditionGroup} isDay={isDay} />
+        {/* Keeps the reading legible over the illustration without washing it out. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(100deg, color-mix(in srgb, var(--hero-bg) 94%, transparent) 0%, color-mix(in srgb, var(--hero-bg) 62%, transparent) 32%, transparent 60%)",
+          }}
+        />
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 max-w-[24rem]">
+            <p
+              className="text-[0.6rem] font-bold uppercase tracking-[0.18em]"
+              style={{ color: "var(--hero-muted)" }}
+            >
+              Weather desk
+            </p>
             <h2
               id="weather-desk-heading"
-              className="mt-1 font-display text-xl font-semibold tracking-[-0.035em] sm:text-2xl"
+              className="mt-1 font-display text-[1.65rem] font-semibold leading-tight tracking-[-0.03em] sm:text-[2rem]"
             >
-              Make sense of the forecast
+              {location.name}
             </h2>
+            <p className="mt-1 text-[0.76rem] font-medium" style={{ color: "var(--hero-muted)" }}>
+              {formatLocalDate(now, data.timezone)} · {formatTime(now, data.timezone)}
+            </p>
+            <div className="mt-3 flex flex-wrap items-end gap-x-2.5 gap-y-1">
+              <span className="number-tabular font-display text-[clamp(3rem,7vw,4.3rem)] font-semibold leading-[0.82] tracking-[-0.05em]">
+                {temperature}
+              </span>
+              <span
+                className="mb-1 text-[0.78rem] font-semibold leading-tight"
+                style={{ color: "var(--hero-muted)" }}
+              >
+                {conditionLabel}
+              </span>
+            </div>
           </div>
+
+          <p
+            className="max-w-[26ch] rounded-2xl px-3 py-2 text-[0.66rem] leading-4 backdrop-blur-[2px]"
+            style={{
+              backgroundColor: "color-mix(in srgb, var(--card) 55%, transparent)",
+              color: "var(--hero-ink)",
+            }}
+          >
+            Five local tools from the same Open-Meteo forecast. All times are{" "}
+            {data.timezone || "local"}.
+          </p>
         </div>
-        <p className="max-w-[36ch] text-[0.68rem] leading-4 text-muted-foreground sm:text-right">
-          Five local tools from the same Open-Meteo forecast. All times are{" "}
-          {data.timezone || "local"}.
-        </p>
       </div>
 
-      <DeskBrief data={data} now={now} />
+      <div className="relative bg-card px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
+        <DeskBrief data={data} now={now} />
 
       <div
         role="tablist"
@@ -494,6 +523,7 @@ export default function WeatherDesk({ data, location, savedLocations = [], now, 
             onSelectPlace={onSelectPlace}
           />
         ) : null}
+      </div>
       </div>
     </section>
   );

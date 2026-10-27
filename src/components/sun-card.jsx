@@ -70,7 +70,7 @@ export default function SunCard({ current, timezone, now }) {
 
   return (
     <section
-      className="surface-card flex flex-col p-4 sm:p-5"
+      className="surface-card flex h-full flex-col p-4 sm:p-5"
       aria-labelledby="sun-card-heading"
       data-testid="sun-card"
     >
@@ -175,7 +175,7 @@ export default function SunCard({ current, timezone, now }) {
         </div>
       </div>
 
-      <p className="mt-3 text-xs leading-5 text-muted-foreground">{status}</p>
+      <p className="mt-auto pt-3 text-xs leading-5 text-muted-foreground">{status}</p>
     </section>
   );
 }

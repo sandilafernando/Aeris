@@ -32,6 +32,7 @@ import {
   buildGlanceView,
   normalizeGlanceMetrics,
   normalizeGlanceSource,
+  stationOptionsForSource,
 } from "@/lib/glance";
 import { requestCurrentPlace, geolocationErrorMessage } from "@/lib/geolocation";
 import { AUTOMATIC_STATION_ID } from "@/lib/station-selection";
@@ -262,25 +263,29 @@ function MetricCell({ icon: Icon, label, value, supporting, accent = false }) {
   return (
     <div
       className={cn(
-        "flex min-w-0 flex-col rounded-xl px-2.5 py-2",
-        accent ? "bg-primary-container/65 text-on-primary-container" : "bg-card/70",
+        "flex min-w-0 flex-col justify-between rounded-[1.1rem] px-3 py-2.5 transition-[background-color,transform] duration-300",
+        accent
+          ? "bg-primary-container/85 text-on-primary-container"
+          : "bg-surface-container/85",
       )}
     >
       <dt
         className={cn(
-          "flex items-center gap-1 text-[0.56rem] font-bold uppercase leading-3 tracking-[0.1em]",
-          accent ? "text-on-primary-container/80" : "text-muted-foreground",
+          "flex items-center gap-1.5 text-[0.55rem] font-bold uppercase leading-3 tracking-[0.11em]",
+          accent ? "text-on-primary-container/75" : "text-muted-foreground",
         )}
       >
-        <Icon aria-hidden="true" className="size-3 shrink-0" />
+        <Icon aria-hidden="true" className="size-3 shrink-0" strokeWidth={2.4} />
         <span className="min-w-0 truncate">{label}</span>
       </dt>
-      <dd className="mt-1 text-sm font-semibold leading-tight">
-        <span className="font-semibold">{value}</span>
+      <dd className="mt-1 min-w-0">
+        <span className="block truncate font-display text-[1.32rem] font-semibold leading-none tracking-[-0.035em]">
+          {value}
+        </span>
         {supporting ? (
           <span
             className={cn(
-              "mt-0.5 block text-[0.6rem] font-normal leading-4",
+              "mt-1 block text-[0.6rem] font-medium leading-4",
               accent ? "text-on-primary-container/75" : "text-muted-foreground",
             )}
           >
@@ -402,7 +407,7 @@ function MetricsGrid({ group, metrics, units }) {
   }
 
   return (
-    <dl className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+    <dl className="mt-2 grid grid-cols-2 gap-1.5 [&>div:last-child:nth-child(odd)]:col-span-2">
       {cells.map(({ metric, label, icon, cell }, index) => (
         <MetricCell
           key={metric}
@@ -410,7 +415,7 @@ function MetricsGrid({ group, metrics, units }) {
           label={label}
           value={cell.value}
           supporting={cell.supporting}
-          accent={group.id === "metar" && metric === "wind" && index === 0}
+          accent={index === 0}
         />
       ))}
     </dl>
@@ -430,19 +435,19 @@ function ModelBlock({ current, timezone, metrics, units }) {
 
   return (
     <div
-      className="mt-3 rounded-2xl border border-outline-variant/70 bg-surface-container/35 p-2.5"
+      className="mt-3 rounded-[1.35rem] bg-surface-container/40 p-2.5"
       data-testid="atmosphere-card"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
-        <p className="text-[0.6rem] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5 px-0.5">
+        <p className="text-[0.55rem] font-bold uppercase tracking-[0.12em] text-muted-foreground">
           Air around you
         </p>
-        <p className="text-[0.6rem] font-medium text-muted-foreground">
+        <p className="text-[0.55rem] font-medium text-muted-foreground">
           Open-Meteo model · not an observation
         </p>
       </div>
       {cells.length ? (
-        <dl className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+        <dl className="mt-1.5 grid grid-cols-2 gap-1.5 [&>div:last-child:nth-child(odd)]:col-span-2">
           {cells.map(({ metric, label, icon, cell }) => (
             <MetricCell
               key={metric}
@@ -542,16 +547,11 @@ export default function AtAGlance({
   const metrics = normalizeGlanceMetrics(glanceMetrics);
   const units = { temperatureUnit, windUnit, measurementSystem };
 
-  const stationOptions = useMemo(() => {
-    const byId = new Map();
-    for (const station of dom.data?.stations || []) byId.set(station.id, station);
-    for (const station of metar.data?.stations || []) {
-      if (!byId.has(station.id)) {
-        byId.set(station.id, { ...station, stationId: station.icaoId });
-      }
-    }
-    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [dom.data?.stations, metar.data?.stations]);
+  const stationOptions = useMemo(
+    () =>
+      stationOptionsForSource({ source: glanceSource, dom: dom.data, metar: metar.data }),
+    [glanceSource, dom.data, metar.data],
+  );
 
   const handleNearMe = useCallback(async () => {
     if (locating) return;
@@ -598,26 +598,24 @@ export default function AtAGlance({
 
   return (
     <section
-      aria-labelledby="at-a-glance-heading"
+      aria-label="At a glance"
       className="surface-card relative flex h-full flex-col overflow-hidden p-4 sm:p-5"
       data-testid="at-a-glance"
     >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-12 -top-14 size-40 rounded-full bg-secondary-container/35 blur-2xl"
-      />
-
-      <div className="relative flex flex-wrap items-start justify-between gap-2.5">
+      <div className="relative flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="eyebrow flex items-center gap-1.5">
             <LocateFixed aria-hidden="true" className="size-3" />
-            Observing {nearMe?.name || activeLocation?.name || "this place"}
+            At a glance
+            <span className="ml-1 text-[0.55rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground/80">
+              Now
+            </span>
           </p>
           <h2
             id="at-a-glance-heading"
-            className="mt-1 font-display text-xl font-semibold tracking-[-0.035em]"
+            className="mt-1.5 font-display text-[1.6rem] font-semibold leading-tight tracking-[-0.035em] sm:text-[1.75rem]"
           >
-            At a glance
+            {nearMe?.name || activeLocation?.name || "This place"}
           </h2>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -707,14 +705,23 @@ export default function AtAGlance({
           describedBy="glance-station-help"
           className="mt-1.5"
         />
-        <p id="glance-station-help" className="mt-1.5 text-[0.62rem] leading-4 text-muted-foreground">
-          {stationId !== AUTOMATIC_STATION_ID
-            ? "A manual station stays fixed. The same airport is used when it has one."
-            : nearMe
-              ? `Automatic picks the nearest fresh station to ${nearMe.name}. It does not change your forecast location.`
-              : view.domGroup?.selection?.defaulted
-                ? "Using a default station for this place."
-                : "Automatic picks the nearest fresh station to the active place."}
+        <p
+          id="glance-station-help"
+          className="mt-1.5 min-h-[2.4rem] text-[0.62rem] leading-4 text-muted-foreground"
+        >
+          {normalizeGlanceSource(glanceSource) === "metar"
+            ? stationOptions.length > 0 &&
+              stationId !== AUTOMATIC_STATION_ID &&
+              !stationOptions.some((station) => station.id === stationId)
+              ? "That station has no airport report. Airports lists only the four NOAA AWC METAR stations, so choose one of them or Automatic."
+              : "Airports lists only the four NOAA AWC METAR stations that report in Sri Lanka. Automatic picks the nearest fresh one."
+            : stationId !== AUTOMATIC_STATION_ID
+              ? "A manual station stays fixed. The same airport is used when it has one."
+              : nearMe
+                ? `Automatic picks the nearest fresh station to ${nearMe.name}. It does not change your forecast location.`
+                : view.domGroup?.selection?.defaulted
+                  ? "Using a default station for this place."
+                  : "Automatic picks the nearest fresh station to the active place."}
         </p>
       </div>
 

@@ -76,6 +76,42 @@ export function normalizeGlanceMetrics(value) {
   return metrics.length ? metrics : [...DEFAULT_GLANCE_METRICS];
 }
 
+/**
+ * Station choices must match the source that is actually on screen. The METAR
+ * route publishes four airports while the DoM snapshot publishes 24 district
+ * stations, so offering the whole union in Airports mode turns every pick into
+ * a silent no-op. Ids are shared slugs between the two sources, which is what
+ * lets a saved station survive a source switch.
+ */
+export function stationOptionsForSource({ source, dom = null, metar = null } = {}) {
+  const resolved = normalizeGlanceSource(source);
+  const domStations = Array.isArray(dom?.stations) ? dom.stations : [];
+  // A METAR station carries an ICAO code, which the shared selector shows as a
+  // suffix so an airport is never confused with a DoM district station.
+  const metarStations = (Array.isArray(metar?.stations) ? metar.stations : []).map(
+    (station) =>
+      station?.icaoId && !station.stationId
+        ? { ...station, stationId: station.icaoId }
+        : station,
+  );
+
+  if (resolved === "metar") {
+    return metarStations
+      .filter((station) => station?.id)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+  if (resolved === "dom") return domStations;
+
+  const byId = new Map();
+  for (const station of domStations) {
+    if (station?.id && !byId.has(station.id)) byId.set(station.id, station);
+  }
+  for (const station of metarStations) {
+    if (station?.id && !byId.has(station.id)) byId.set(station.id, station);
+  }
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export function toggleGlanceMetric(metrics, metric) {
   const current = normalizeGlanceMetrics(metrics);
   if (current.includes(metric)) {

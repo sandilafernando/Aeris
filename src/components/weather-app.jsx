@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CloudAlert, WifiOff } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import AppHeader from "@/components/app-header";
+import AnimatedHeight from "@/components/animated-height";
 import AtAGlance from "@/components/at-a-glance";
 import CurrentWeatherHero from "@/components/current-weather-hero";
 import DailyForecast from "@/components/daily-forecast";
@@ -373,7 +374,7 @@ export default function WeatherApp() {
               />
             </div>
 
-            <div className="min-w-0 lg:col-span-5 xl:col-span-4">
+            <AnimatedHeight className="lg:col-span-5 xl:col-span-4">
               <AtAGlance
                 activeLocation={activeLocation}
                 model={weather.data.current}
@@ -383,7 +384,7 @@ export default function WeatherApp() {
                 stationId={stationId}
                 onStationChange={setStationId}
               />
-            </div>
+            </AnimatedHeight>
 
             <div className="min-w-0 scroll-reveal lg:col-span-12">
               <SatelliteCard
@@ -392,19 +393,19 @@ export default function WeatherApp() {
               />
             </div>
 
-            <div className="min-w-0 scroll-reveal lg:col-span-5">
-              <SunCard
-                current={weather.data.current}
-                timezone={weather.data.timezone}
-                now={now}
-              />
-            </div>
-
             <div className="min-w-0 scroll-reveal lg:col-span-7">
               <HourlyForecast
                 hourly={weather.data.hourly}
                 timezone={weather.data.timezone}
                 locationName={activeLocation.name}
+              />
+            </div>
+
+            <div className="min-w-0 scroll-reveal lg:col-span-5">
+              <SunCard
+                current={weather.data.current}
+                timezone={weather.data.timezone}
+                now={now}
               />
             </div>
 

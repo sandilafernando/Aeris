@@ -32,13 +32,14 @@ import { InstallHint } from "@/components/pwa-manager";
 import { usePreferences } from "@/components/preferences-provider";
 import { useOnlineStatus } from "@/hooks/use-environment";
 import { useInstallPrompt } from "@/hooks/use-install-prompt";
-import { useMeteoJson } from "@/hooks/use-official-source";
+import { useMetarObservations, useMeteoJson } from "@/hooks/use-official-source";
 import {
   GLANCE_METRIC_IDS,
   GLANCE_METRIC_LABELS,
   MAX_GLANCE_METRICS,
   normalizeGlanceMetrics,
   normalizeGlanceSource,
+  stationOptionsForSource,
 } from "@/lib/glance";
 import { AUTOMATIC_STATION_ID } from "@/lib/station-selection";
 
@@ -91,7 +92,11 @@ export default function SettingsDialog({
   } = usePreferences();
   const online = useOnlineStatus();
   const install = useInstallPrompt();
+  const resolvedSource = normalizeGlanceSource(glanceSource);
   const dom = useMeteoJson({ enabled: open, online });
+  // Airports and Both need the METAR list so the station picker can match the
+  // source the dashboard is showing. DoM stays the default and skips the call.
+  const metar = useMetarObservations({ enabled: open && resolvedSource !== "dom", online });
   const [notificationPermission, setNotificationPermission] = useState("unknown");
 
   /* eslint-disable react-hooks/set-state-in-effect -- Notification.permission only exists in the browser and must be read after hydration. */
@@ -141,11 +146,18 @@ export default function SettingsDialog({
     }
   };
 
-  const stations = dom?.data?.stations || [];
-  const stationLoading = dom?.status === "loading" && !dom?.data;
-  const stationError = dom?.status === "error" && !dom?.data;
+  const stations = stationOptionsForSource({
+    source: resolvedSource,
+    dom: dom?.data,
+    metar: metar?.data,
+  });
+  const activeSource = resolvedSource === "metar" ? metar : dom;
+  const sourceLabel = resolvedSource === "metar" ? "airport" : "DoM";
+  const stationLoading = activeSource?.status === "loading" && !activeSource?.data;
+  const stationError = activeSource?.status === "error" && !activeSource?.data;
   const stationStale =
-    (dom?.status === "stale" && Boolean(dom?.data)) || dom?.data?.status === "stale";
+    (activeSource?.status === "stale" && Boolean(activeSource?.data)) ||
+    activeSource?.data?.status === "stale";
   const manualMissing =
     stationId !== AUTOMATIC_STATION_ID &&
     stations.length > 0 &&
@@ -363,7 +375,13 @@ export default function SettingsDialog({
             <div className="space-y-3 rounded-2xl border border-outline-variant bg-surface-container/55 p-3.5">
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <MapPin aria-hidden="true" className="size-4 text-muted-foreground" />
-                <label htmlFor="settings-station-select">Sri Lanka DoM station</label>
+                <label htmlFor="settings-station-select">
+                  {resolvedSource === "metar"
+                    ? "NOAA AWC airport station"
+                    : resolvedSource === "combined"
+                      ? "Official station (DoM and airports)"
+                      : "Sri Lanka DoM station"}
+                </label>
               </div>
               <StationSelect
                 id="settings-station-select"
@@ -375,11 +393,13 @@ export default function SettingsDialog({
               />
               <p
                 id="settings-station-help"
-                className="text-[0.7rem] leading-5 text-muted-foreground"
+                className="min-h-[4.5rem] text-[0.7rem] leading-5 text-muted-foreground"
               >
-                Automatic chooses from the selected place and prefers a fresh observation over
-                a stale nearer station. A manual choice is saved on this device and stays
-                selected across refreshes and app restarts.
+                {resolvedSource === "metar"
+                  ? "Only the four NOAA AWC METAR airports are listed here, because that is all the airport feed publishes. A saved DoM district station stays saved; it simply has no airport report."
+                  : resolvedSource === "combined"
+                    ? "Both sources are listed together and share their station ids, so a saved station follows you across a source switch."
+                    : "Automatic chooses from the selected place and prefers a fresh observation over a stale nearer station. A manual choice is saved on this device and stays selected across refreshes and app restarts."}
               </p>
 
               {stationLoading ? (
@@ -397,14 +417,14 @@ export default function SettingsDialog({
                 <div className="rounded-xl bg-card/70 px-3 py-2.5 text-[0.7rem] leading-5">
                   <p className="font-semibold">Station list unavailable</p>
                   <p className="mt-0.5 text-muted-foreground">
-                    The official source did not respond.
-                    {dom?.retryInSeconds > 0
-                      ? ` Retrying in ${dom.retryInSeconds}s.`
+                    The {sourceLabel} source did not respond.
+                    {activeSource?.retryInSeconds > 0
+                      ? ` Retrying in ${activeSource.retryInSeconds}s.`
                       : ""}
                   </p>
                   <button
                     type="button"
-                    onClick={dom?.refresh}
+                    onClick={activeSource?.refresh}
                     className="mt-1.5 min-h-9 rounded-full px-2.5 text-[0.68rem] font-semibold text-primary hover:bg-primary-container"
                   >
                     Try again
