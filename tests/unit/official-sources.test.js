@@ -10,6 +10,7 @@ import {
 import {
   humidityFromDewpoint,
   normalizeMetarPayload,
+  normalizeMetarReport,
 } from "../../src/lib/sources/metar.js";
 import {
   OFFICIAL_FALLBACK_NOTICE,
@@ -247,6 +248,56 @@ test("METAR fallback normalizes only Sri Lankan airport reports and keeps missin
   assert.equal(katunayake.conditionKey, "cloudy", "RESHRA is recent weather, not current rain");
   assert.equal(katunayake.referencePoint.official, true);
   assert.equal(katunayake.referencePoint.label, "Airport station coordinates (NOAA AWC)");
+});
+
+test("absent METAR fields stay absent instead of becoming measured zeros", () => {
+  const report = normalizeMetarReport({
+    icaoId: "VCBI",
+    obsTime: Math.floor(METAR_FIXED_OBSERVED_AT),
+    temp: null,
+    dewp: null,
+    wspd: null,
+    wgst: null,
+    wdir: null,
+    altim: null,
+    visib: null,
+    cover: "BKN",
+    clouds: [{ cover: "BKN", base: null }],
+    rawOb: "METAR VCBI 260010Z ///// ///// BKN016",
+  });
+
+  // A partial but readable report is kept, with the missing measurements null.
+  assert.ok(report);
+  assert.equal(report.temperatureC, null);
+  assert.equal(report.dewpointC, null);
+  assert.equal(report.relativeHumidity, null);
+  assert.equal(report.windSpeedKmh, null, "a missing wind speed is not 0 km/h");
+  assert.equal(report.windGustKmh, null, "a missing gust is not 0 km/h");
+  assert.equal(report.windDirection, null, "a missing direction is not due north");
+  assert.equal(report.pressureHpa, null, "a missing pressure is not 0 hPa");
+  assert.equal(report.visibilityLabel, null);
+  assert.equal(report.cloudBaseFt, null);
+  assert.equal(report.conditionKey, "cloudy");
+
+  const emptyStrings = normalizeMetarReport({
+    icaoId: "VCBI",
+    obsTime: METAR_FIXED_OBSERVED_AT,
+    temp: "",
+    dewp: "",
+    wspd: "",
+    wdir: "",
+    altim: "",
+    rawOb: "METAR VCBI 260010Z CAVOK",
+  });
+  assert.equal(emptyStrings.temperatureC, null);
+  assert.equal(emptyStrings.pressureHpa, null);
+  assert.equal(emptyStrings.windSpeedKmh, null);
+
+  // No time, no raw report, and no temperature is not an observation.
+  assert.equal(
+    normalizeMetarReport({ icaoId: "VCBI", obsTime: null, temp: null, rawOb: "" }),
+    null,
+  );
 });
 
 test("DoM fetch falls through to the alternate host and reports safe attempts", async () => {

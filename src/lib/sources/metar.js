@@ -112,6 +112,11 @@ export class MetarSourceError extends Error {
 }
 
 function finiteNumber(value) {
+  // `Number(null)` is 0 and `Number("")` is 0. Treating an absent METAR field
+  // as a measured zero would fabricate a temperature, a pressure, or a wind
+  // direction, so absence must stay absent.
+  if (value == null || typeof value === "boolean") return null;
+  if (typeof value === "string" && value.trim() === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }

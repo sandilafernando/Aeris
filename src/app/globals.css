@@ -403,6 +403,17 @@
   animation: none !important;
 }
 
+/*
+ * A hidden tab does not need to animate. Pausing every CSS animation stops the
+ * weather scene, skeleton shimmer, and pulses from burning frames while the
+ * page is in the background, and they resume on the same frame when it returns.
+ */
+html[data-visibility="hidden"] *,
+html[data-visibility="hidden"] *::before,
+html[data-visibility="hidden"] *::after {
+  animation-play-state: paused !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .scroll-reveal,
   .soft-pulse,

@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { normalizeGlanceMetrics, normalizeGlanceSource } from "@/lib/glance";
 import { readPreferences, savePreferences } from "@/lib/storage";
 
 const PreferencesContext = createContext(null);
@@ -58,6 +59,8 @@ export function PreferencesProvider({ children }) {
       reducedEffects: preferences.reducedEffects,
       stationId: preferences.stationId,
       weatherNotifications: preferences.weatherNotifications,
+      glanceSource: preferences.glanceSource,
+      glanceMetrics: preferences.glanceMetrics,
       measurementSystem: preferences.windUnit === "mph" ? "imperial" : "metric",
       setTheme: (theme) => updatePreferences({ theme }),
       setTemperatureUnit: (temperatureUnit) => updatePreferences({ temperatureUnit }),
@@ -66,6 +69,10 @@ export function PreferencesProvider({ children }) {
       setStationId: (stationId) => updatePreferences({ stationId }),
       setWeatherNotifications: (weatherNotifications) =>
         updatePreferences({ weatherNotifications }),
+      setGlanceSource: (glanceSource) =>
+        updatePreferences({ glanceSource: normalizeGlanceSource(glanceSource) }),
+      setGlanceMetrics: (glanceMetrics) =>
+        updatePreferences({ glanceMetrics: normalizeGlanceMetrics(glanceMetrics) }),
     }),
     [preferences, resolvedTheme, updatePreferences],
   );

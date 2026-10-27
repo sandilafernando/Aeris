@@ -237,3 +237,31 @@ export function useSriLankaObservations(options = {}) {
     ...rest,
   });
 }
+
+/**
+ * Department of Meteorology snapshot collected into `data/meteo.json`.
+ * This is the primary official-station source for the At a glance widget.
+ */
+export function useMeteoJson(options = {}) {
+  const { enabled = true, online = true, ...rest } = options;
+  return useOfficialSource("meteo-json", "/api/weather/meteo-json", {
+    ttlMs: 2 * 60 * 1000,
+    enabled,
+    online,
+    ...rest,
+  });
+}
+
+/**
+ * NOAA AWC METAR airport reports. Loaded lazily only when the selected source
+ * needs it or the DoM observation is stale.
+ */
+export function useMetarObservations(options = {}) {
+  const { enabled = true, online = true, ...rest } = options;
+  return useOfficialSource("sri-lanka-metar", "/api/weather/metar", {
+    ttlMs: 2 * 60 * 1000,
+    enabled,
+    online,
+    ...rest,
+  });
+}

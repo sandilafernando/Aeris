@@ -1,13 +1,41 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { buildWeatherPayload, searchResultsFor, BERLIN } from "../fixtures/weather";
-import { SRI_LANKA_HTML } from "../fixtures/official-sources";
-import { normalizeSriLankaHtml } from "../../src/lib/sources/sri-lanka-dom";
+import { normalizeMeteoJsonPayload } from "../../src/lib/sources/meteo-json";
+import { slugifyStationName } from "../../src/lib/sources/sri-lanka-dom";
 
 const GEOCODING_ROUTE = /geocoding-api\.open-meteo\.com\/v1\/search/;
 const FORECAST_ROUTE = /api\.open-meteo\.com\/v1\/forecast/;
 const ENSEMBLE_ROUTE = /ensemble-api\.open-meteo\.com\/v1\/ensemble/;
 const ARCHIVE_ROUTE = /archive-api\.open-meteo\.com\/v1\/archive/;
-const DOM_ROUTE = "**/api/weather/sri-lanka-dom";
+const METEO_JSON_ROUTE = "**/api/weather/meteo-json";
+const METAR_ROUTE = "**/api/weather/metar";
 const GIBS_ROUTE = "https://gibs.earthdata.nasa.gov/**";
+
+// The real 24-station DoM snapshot. Tests copy its names and readings and only
+// move `lastUpdated` so freshness behaviour is deterministic.
+const REAL_METEO_SNAPSHOT = JSON.parse(
+  readFileSync(path.join(process.cwd(), "data", "meteo.json"), "utf8"),
+);
+
+const SRI_LANKA_OFFSET_MS = (5 * 60 + 30) * 60_000;
+
+function sriLankaShiftedIso(epochMs) {
+  return new Date(epochMs + SRI_LANKA_OFFSET_MS).toISOString();
+}
+
+function sriLankaObservationStamp(epochMs) {
+  const iso = sriLankaShiftedIso(epochMs);
+  return `${iso.slice(0, 10)} ${iso.slice(11, 13)}${iso.slice(14, 16)}`;
+}
+
+function sriLankaIso(epochMs) {
+  return `${sriLankaShiftedIso(epochMs).slice(0, 23)}+05:30`;
+}
+
+function sriLankaDisplay(epochMs) {
+  return sriLankaShiftedIso(epochMs).slice(0, 19).replace("T", " ");
+}
 
 // A valid 1×1 PNG followed by ignored padding. The satellite card rejects
 // frames below 5 KB because GIBS advertises blank frames before ingestion
@@ -44,50 +72,80 @@ function environmentFor(latitude, longitude) {
 }
 
 /**
- * Observations are aged relative to the browser clock so freshness behaviour
- * is testable regardless of when the suite runs. `stationAges` maps station
- * IDs to an age in minutes; everything else uses `observationAgeMinutes`.
+ * Build the same response shape as `/api/weather/meteo-json` from the real
+ * 24-station snapshot. Only `lastUpdated` is shifted so freshness is
+ * deterministic. `stationAges` maps station IDs to an age in minutes.
  */
-function buildObservationsPayload({
+function buildMeteoJsonPayload({
   observationAgeMinutes = 25,
   stationAges = {},
   omitStations = [],
 } = {}) {
-  // The route serves a cached fetch, so a small gap between retrieval and
-  // response is normal. Keep the two timestamps distinct in tests as they are
-  // in the real route handler.
   const servedAt = Date.now();
   const fetchedAt = servedAt - 20_000;
-  const payload = normalizeSriLankaHtml(SRI_LANKA_HTML, { fetchedAt });
   const omitted = new Set(omitStations);
-  const stations = payload.stations
-    .filter((station) => !omitted.has(station.id))
+  let youngestAge = observationAgeMinutes;
+
+  const stations = REAL_METEO_SNAPSHOT.stations
+    .filter((station) => !omitted.has(slugifyStationName(station.name)))
     .map((station) => {
-      const age = stationAges[station.id] ?? observationAgeMinutes;
-      const observedAt = fetchedAt - age * 60_000;
+      const id = slugifyStationName(station.name);
+      const age = stationAges[id] ?? observationAgeMinutes;
+      youngestAge = Math.min(youngestAge, age);
       return {
         ...station,
-        observationTime: new Date(observedAt).toISOString(),
-        observationEpochMs: observedAt,
+        weather: {
+          ...station.weather,
+          // Live rainfall changes with the weather. Pin Pottuvil to a trace
+          // value so the trace-rendering test stays deterministic without
+          // inventing a value in production code.
+          rainfall: id === "pottuvil" ? "Trace" : station.weather.rainfall,
+          lastUpdated: sriLankaObservationStamp(fetchedAt - age * 60_000),
+        },
       };
     });
-  const observationTimes = [...new Set(stations.map((station) => station.observationTime))].sort(
-    (a, b) => Date.parse(b) - Date.parse(a),
-  );
+
+  const latestEpoch = fetchedAt - youngestAge * 60_000;
+  const raw = {
+    source: REAL_METEO_SNAPSHOT.source,
+    fetchedAt: new Date(fetchedAt).toISOString(),
+    fetchedAtSriLanka: sriLankaIso(fetchedAt),
+    fetchedAtSriLankaDisplay: sriLankaDisplay(fetchedAt),
+    timezone: "Asia/Colombo",
+    meteoLatestObservationUpdatedAt: sriLankaObservationStamp(latestEpoch),
+    meteoLatestObservationUpdatedAtSriLanka: sriLankaIso(latestEpoch),
+    stationCount: stations.length,
+    stations,
+  };
+
+  const normalized = normalizeMeteoJsonPayload(raw, {
+    retrievedAt: servedAt,
+    remoteUrl:
+      "https://raw.githubusercontent.com/sandilafernando/Aeris/main/data/meteo.json",
+  });
+  const observationAge = Date.parse(normalized.observationTime || "");
+  const observationAgeMinutesValue = Number.isFinite(observationAge)
+    ? (servedAt - observationAge) / 60_000
+    : null;
+  const observationStale =
+    observationAgeMinutesValue == null ||
+    observationAgeMinutesValue > normalized.staleAfterMinutes;
 
   return {
-    ...payload,
-    fetchedAt: new Date(fetchedAt).toISOString(),
-    stations,
-    stationCount: stations.length,
-    observationTime: observationTimes[0] ?? null,
-    observationTimes,
-    staleAfterMinutes: 360,
-    status: "ok",
+    ...normalized,
+    status: observationStale ? "stale" : "ok",
     servedAt: new Date(servedAt).toISOString(),
     cache: "fresh",
     upstreamStale: false,
-    notice: null,
+    observationAgeMinutes:
+      observationAgeMinutesValue == null ? null : Math.round(observationAgeMinutesValue),
+    collectionAgeMinutes: 0,
+    observationStale,
+    collectionStale: false,
+    collectionStaleAfterMinutes: 90,
+    notice: observationStale
+      ? "The latest observation in the DoM snapshot is older than 5 hours."
+      : null,
   };
 }
 
@@ -96,8 +154,6 @@ function buildMetarObservationsPayload({ observationAgeMinutes = 12 } = {}) {
   const fetchedAt = servedAt - 20_000;
   const observedAt = fetchedAt - observationAgeMinutes * 60_000;
   const observationTime = new Date(observedAt).toISOString();
-  const notice =
-    "The Department of Meteorology page could not be reached from this server. Showing official ICAO airport METAR reports from NOAA AWC instead. These are airport stations, not DoM district stations.";
 
   const stations = [
     {
@@ -193,15 +249,9 @@ function buildMetarObservationsPayload({ observationAgeMinutes = 12 } = {}) {
     servedAt: new Date(servedAt).toISOString(),
     cache: "fresh",
     upstreamStale: false,
-    notice,
-    fallback: {
-      active: true,
-      from: "sri-lanka-dom",
-      to: "sri-lanka-metar",
-      reason: "timeout",
-      notice,
-    },
-    attempts: [{ attempt: 1, status: null, code: "timeout", durationMs: 3000 }],
+    observationAgeMinutes: Math.round(observationAgeMinutes),
+    observationStale: observationAgeMinutes > 180,
+    notice: null,
   };
 }
 
@@ -266,8 +316,10 @@ export async function mockOpenMeteo(page, options = {}) {
     searchRequests: 0,
     ensembleRequests: 0,
     archiveRequests: 0,
-    officialObservationRequests: 0,
-    officialObservationFailures: 0,
+    meteoJsonRequests: 0,
+    meteoJsonFailures: 0,
+    metarRequests: 0,
+    metarFailures: 0,
     satelliteImageRequests: 0,
     satelliteMetadataRequests: 0,
     weatherSuccesses: 0,
@@ -275,7 +327,9 @@ export async function mockOpenMeteo(page, options = {}) {
     failWeatherTimes: options.failWeatherTimes || 0,
     failWeatherAfter: options.failWeatherAfter ?? null,
     failWeatherCount: options.failWeatherCount ?? 1,
-    failObservationsTimes: options.failObservationsTimes || 0,
+    failMeteoJsonTimes:
+      options.failMeteoJsonTimes ?? options.failObservationsTimes ?? 0,
+    failMetarTimes: options.failMetarTimes ?? 0,
     weatherDelayMs: options.weatherDelayMs ?? 0,
     isDay: options.isDay ?? 1,
   };
@@ -379,29 +433,21 @@ export async function mockOpenMeteo(page, options = {}) {
     });
   });
 
-  await page.route(DOM_ROUTE, async (route) => {
-    state.officialObservationRequests += 1;
+  await page.route(METEO_JSON_ROUTE, async (route) => {
+    state.meteoJsonRequests += 1;
 
-    if (state.failObservationsTimes > 0) {
-      state.failObservationsTimes -= 1;
-      state.officialObservationFailures += 1;
+    const forcedMetar = options.officialSource === "metar";
+    if (state.failMeteoJsonTimes > 0 || forcedMetar) {
+      if (state.failMeteoJsonTimes > 0) state.failMeteoJsonTimes -= 1;
+      state.meteoJsonFailures += 1;
       await route.fulfill({
-        status: 502,
+        status: 503,
         contentType: "application/json",
-        body: JSON.stringify({ status: "unavailable", error: "Test observation failure" }),
-      });
-      return;
-    }
-
-    if (options.officialSource === "metar") {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(
-          buildMetarObservationsPayload({
-            observationAgeMinutes: options.observationAgeMinutes,
-          }),
-        ),
+        body: JSON.stringify({
+          status: "unavailable",
+          error: "Test DoM snapshot failure",
+          code: "test-unavailable",
+        }),
       });
       return;
     }
@@ -410,10 +456,39 @@ export async function mockOpenMeteo(page, options = {}) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(
-        buildObservationsPayload({
+        buildMeteoJsonPayload({
           observationAgeMinutes: options.observationAgeMinutes,
           stationAges: options.stationAges,
           omitStations: options.omitStations,
+        }),
+      ),
+    });
+  });
+
+  await page.route(METAR_ROUTE, async (route) => {
+    state.metarRequests += 1;
+
+    if (state.failMetarTimes > 0) {
+      state.failMetarTimes -= 1;
+      state.metarFailures += 1;
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "unavailable",
+          error: "Test METAR failure",
+          code: "test-unavailable",
+        }),
+      });
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(
+        buildMetarObservationsPayload({
+          observationAgeMinutes: options.metarObservationAgeMinutes ?? 12,
         }),
       ),
     });

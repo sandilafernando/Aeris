@@ -73,6 +73,77 @@ function TimeRange({ start, hours, timezone }) {
   return `${formatTime(start, timezone)} – ${formatTime(end, timezone)}`;
 }
 
+function BriefStat({ icon: Icon, label, value, supporting }) {
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-xl border border-outline-variant/50 bg-card/55 px-2.5 py-2">
+      <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full bg-card/90 text-primary shadow-sm">
+        <Icon aria-hidden="true" className="size-3" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-[0.56rem] font-bold uppercase leading-3 tracking-[0.1em] text-muted-foreground">
+          {label}
+        </p>
+        <p className="mt-0.5 truncate text-[0.8rem] font-semibold leading-4">{value}</p>
+        <p className="truncate text-[0.6rem] leading-4 text-muted-foreground">{supporting}</p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The desk opens with a short, data-derived brief. It is computed from the same
+ * forecast as the panels, so it cannot drift from them, and it never claims a
+ * dry window that the hourly probabilities do not support.
+ */
+function DeskBrief({ data, now }) {
+  const { measurementSystem } = usePreferences();
+  const guidance = buildActivityGuidance(data.hourly, now);
+  const rain = buildRainIntelligence(data.hourly, now);
+  const best =
+    guidance.find((activity) => activity.status === "good") ||
+    guidance.find((activity) => activity.status === "fair") ||
+    null;
+
+  return (
+    <div className="relative mt-3 grid gap-2 sm:grid-cols-3">
+      <BriefStat
+        icon={CloudRain}
+        label="Rain peak"
+        value={
+          rain.maxProbability == null ? "Unavailable" : `${formatNumber(rain.maxProbability)}%`
+        }
+        supporting={
+          rain.peakTime ? `Around ${formatTime(rain.peakTime, data.timezone)}` : "No peak hour"
+        }
+      />
+      <BriefStat
+        icon={Footprints}
+        label="Best outdoor window"
+        value={
+          best
+            ? TimeRange({
+                start: best.windowStart,
+                hours: best.windowLength,
+                timezone: data.timezone,
+              })
+            : "No strong window"
+        }
+        supporting={best ? best.label : "Every activity is limited"}
+      />
+      <BriefStat
+        icon={Umbrella}
+        label="Expected rain"
+        value={
+          rain.totalMm == null
+            ? "Unavailable"
+            : formatPrecipitation(rain.totalMm, measurementSystem)
+        }
+        supporting="Next 24 hours"
+      />
+    </div>
+  );
+}
+
 function PlanPanel({ data, now }) {
   const { temperatureUnit } = usePreferences();
   const guidance = buildActivityGuidance(data.hourly, now);
@@ -336,6 +407,8 @@ export default function WeatherDesk({ data, location, savedLocations = [], now, 
           {data.timezone || "local"}.
         </p>
       </div>
+
+      <DeskBrief data={data} now={now} />
 
       <div
         role="tablist"

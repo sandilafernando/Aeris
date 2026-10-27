@@ -1,6 +1,18 @@
+import {
+  DEFAULT_GLANCE_METRICS,
+  DEFAULT_GLANCE_SOURCE,
+  normalizeGlanceMetrics,
+  normalizeGlanceSource,
+} from "./glance.js";
+
 export const PREFERENCES_KEY = "aeris:preferences:v1";
 export const PLACES_KEY = "aeris:places:v1";
 export const SESSION_LOCATION_KEY = "aeris:session-location:v1";
+export const LAST_FORECAST_KEY = "aeris:last-forecast:v1";
+
+const LAST_FORECAST_LIMIT = 3;
+const LAST_FORECAST_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const LAST_FORECAST_FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
 
 export const DEFAULT_PREFERENCES = Object.freeze({
   theme: "system",
@@ -9,6 +21,8 @@ export const DEFAULT_PREFERENCES = Object.freeze({
   reducedEffects: false,
   stationId: "auto",
   weatherNotifications: false,
+  glanceSource: DEFAULT_GLANCE_SOURCE,
+  glanceMetrics: DEFAULT_GLANCE_METRICS,
 });
 
 const THEMES = new Set(["light", "dark", "system"]);
@@ -59,6 +73,8 @@ export function normalizePreferences(value) {
       typeof value.weatherNotifications === "boolean"
         ? value.weatherNotifications
         : DEFAULT_PREFERENCES.weatherNotifications,
+    glanceSource: normalizeGlanceSource(value.glanceSource),
+    glanceMetrics: normalizeGlanceMetrics(value.glanceMetrics),
   };
 }
 
@@ -161,6 +177,54 @@ export function readPreferences() {
 
 export function savePreferences(preferences) {
   return writeJson(PREFERENCES_KEY, normalizePreferences(preferences));
+}
+
+/*
+ * Offline last-known forecast.
+ *
+ * Only the normalized forecast that was already rendered is stored, never the
+ * raw provider payload, and only for the three most recently used places. The
+ * reader enforces a 24-hour ceiling so a stale copy can never masquerade as a
+ * current forecast; callers must label the copy with its original fetch time.
+ */
+function normalizeForecastSnapshot(value) {
+  if (!value || typeof value !== "object") return null;
+  if (!value.current || typeof value.current !== "object") return null;
+  if (!Array.isArray(value.hourly) || !Array.isArray(value.daily)) return null;
+  const fetchedAt = Number(value.fetchedAt);
+  if (!Number.isFinite(fetchedAt) || fetchedAt <= 0) return null;
+  return value;
+}
+
+export function readLastForecast(key) {
+  if (!key) return null;
+  const store = readJson(LAST_FORECAST_KEY, null);
+  const entry = store?.places?.[key];
+  const data = normalizeForecastSnapshot(entry);
+  if (!data) return null;
+  const age = Date.now() - data.fetchedAt;
+  if (age > LAST_FORECAST_MAX_AGE_MS) return null;
+  if (age < -LAST_FORECAST_FUTURE_TOLERANCE_MS) return null;
+  return data;
+}
+
+export function saveLastForecast(key, data) {
+  if (!key) return false;
+  const snapshot = normalizeForecastSnapshot(data);
+  if (!snapshot) return false;
+
+  const store = readJson(LAST_FORECAST_KEY, null);
+  const existing =
+    store && typeof store === "object" && store.places && typeof store.places === "object"
+      ? store.places
+      : {};
+
+  const entries = Object.entries({ ...existing, [key]: snapshot })
+    .filter(([, entry]) => normalizeForecastSnapshot(entry))
+    .sort((a, b) => b[1].fetchedAt - a[1].fetchedAt)
+    .slice(0, LAST_FORECAST_LIMIT);
+
+  return writeJson(LAST_FORECAST_KEY, { places: Object.fromEntries(entries) });
 }
 
 export function placeKey(place) {

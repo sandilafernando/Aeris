@@ -4,12 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CloudAlert, WifiOff } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import AppHeader from "@/components/app-header";
-import Atmosphere from "@/components/atmosphere";
+import AtAGlance from "@/components/at-a-glance";
 import CurrentWeatherHero from "@/components/current-weather-hero";
 import DailyForecast from "@/components/daily-forecast";
 import HourlyForecast from "@/components/hourly-forecast";
 import LocationDialog from "@/components/location-dialog";
-import OfficialObservations from "@/components/official-observations";
 import Onboarding from "@/components/onboarding";
 import SatelliteCard from "@/components/satellite-card";
 import SettingsDialog from "@/components/settings-dialog";
@@ -21,7 +20,6 @@ import WeatherError from "@/components/weather-error";
 import WeatherSkeleton from "@/components/weather-skeleton";
 import { usePreferences } from "@/components/preferences-provider";
 import { useNow, useOnlineStatus } from "@/hooks/use-environment";
-import { useSriLankaObservations } from "@/hooks/use-official-source";
 import { useWeather } from "@/hooks/use-weather";
 import { useWeatherNotifications } from "@/hooks/use-weather-notifications";
 import { formatTime, relativeUpdateLabel } from "@/lib/format";
@@ -96,16 +94,8 @@ export default function WeatherApp() {
   }, [activeId, savedLocations, sessionActive, sessionLocation]);
 
   const weather = useWeather(activeLocation);
-  const official = useSriLankaObservations({
-    enabled: storageReady && (Boolean(activeLocation) || settingsOpen),
-    online,
-  });
   const refreshWeather = weather.refresh;
-  const now =
-    clock ||
-    weather.data?.fetchedAt ||
-    Date.parse(official.data?.servedAt || official.data?.fetchedAt || "") ||
-    0;
+  const now = clock || weather.data?.fetchedAt || 0;
   const paletteGroup = weather.data?.current?.condition?.group || "partly";
   const paletteDay = weather.data?.current?.isDay ?? true;
 
@@ -132,6 +122,22 @@ export default function WeatherApp() {
       ? `${activeLocation.name} — Weather · Aeris`
       : "Aeris — Weather, in colour";
   }, [activeLocation]);
+
+  // Pause ambient CSS animation while the tab is hidden. The stylesheet reacts
+  // to this attribute, so no component needs to know about it.
+  useEffect(() => {
+    const root = document.documentElement;
+    const sync = () => {
+      root.dataset.visibility =
+        document.visibilityState === "hidden" ? "hidden" : "visible";
+    };
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      document.removeEventListener("visibilitychange", sync);
+      delete root.dataset.visibility;
+    };
+  }, []);
 
   useEffect(() => {
     if (!activeLocation || !online) return undefined;
@@ -255,7 +261,7 @@ export default function WeatherApp() {
   const hasData = Boolean(weather.data);
   const showLoading = storageReady && activeLocation && !hasData && weather.status !== "error";
   const showError = storageReady && activeLocation && !hasData && weather.status === "error";
-  const refreshError = hasData && weather.error;
+  const refreshError = hasData && weather.error && online;
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -296,7 +302,7 @@ export default function WeatherApp() {
               <p className="text-sm font-semibold">You&apos;re offline</p>
               <p className="mt-0.5 text-xs leading-5 opacity-80">
                 {weather.data
-                  ? `Showing the last forecast for ${activeLocation?.name || "this place"}, updated ${formatTime(weather.data.fetchedAt, weather.data.timezone)}.`
+                  ? `Showing the saved forecast for ${activeLocation?.name || "this place"}, last updated ${formatTime(weather.data.fetchedAt, weather.data.timezone)}. It is not live until you reconnect.`
                   : "Reconnect to load a forecast. Saved places are still available."}
               </p>
             </div>
@@ -368,17 +374,25 @@ export default function WeatherApp() {
             </div>
 
             <div className="min-w-0 lg:col-span-5 xl:col-span-4">
-              <OfficialObservations
+              <AtAGlance
                 activeLocation={activeLocation}
-                official={official}
+                model={weather.data.current}
+                timezone={weather.data.timezone}
                 now={now}
+                online={online}
                 stationId={stationId}
                 onStationChange={setStationId}
-                online={online}
               />
             </div>
 
-            <div className="min-w-0 scroll-reveal lg:col-span-6">
+            <div className="min-w-0 scroll-reveal lg:col-span-12">
+              <SatelliteCard
+                location={activeLocation}
+                isDay={weather.data.current?.isDay ?? null}
+              />
+            </div>
+
+            <div className="min-w-0 scroll-reveal lg:col-span-5">
               <SunCard
                 current={weather.data.current}
                 timezone={weather.data.timezone}
@@ -386,15 +400,7 @@ export default function WeatherApp() {
               />
             </div>
 
-            <div className="min-w-0 scroll-reveal lg:col-span-6">
-              <Atmosphere current={weather.data.current} />
-            </div>
-
-            <div className="min-w-0 scroll-reveal lg:col-span-12">
-              <SatelliteCard location={activeLocation} />
-            </div>
-
-            <div className="min-w-0 scroll-reveal lg:col-span-12">
+            <div className="min-w-0 scroll-reveal lg:col-span-7">
               <HourlyForecast
                 hourly={weather.data.hourly}
                 timezone={weather.data.timezone}
@@ -446,7 +452,6 @@ export default function WeatherApp() {
         onOpenChange={setSettingsOpen}
         onCloseAutoFocus={restoreDialogFocus}
         onOpenSources={openSourcesFromSettings}
-        official={official}
       />
       <SourcesDialog
         open={sourcesOpen}

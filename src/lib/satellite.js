@@ -68,6 +68,37 @@ export function frameCandidates(latestIso, count = 3) {
   );
 }
 
+/**
+ * Oldest-to-newest run of real 10-minute frames, ending one step before the
+ * advertised latest frame. GIBS advertises a frame before ingestion finishes,
+ * so the newest advertised slot is deliberately excluded.
+ */
+export function frameSequence(latestIso, count = 6) {
+  return frameCandidates(latestIso, count).reverse();
+}
+
+/**
+ * VIIRS true colour is a daily composite. Asking for "now" can return a
+ * washed-out, partially ingested swath, so pin the request to a finished
+ * daytime pass over Sri Lanka (about 09:30 local time, 04:00 UTC).
+ */
+export function viirsFrameTime(now = Date.now()) {
+  const base = new Date(now);
+  if (Number.isNaN(base.getTime())) return null;
+  const dayOffset = base.getUTCHours() >= 7 ? 0 : 1;
+  const date = new Date(
+    Date.UTC(
+      base.getUTCFullYear(),
+      base.getUTCMonth(),
+      base.getUTCDate() - dayOffset,
+      4,
+      0,
+      0,
+    ),
+  );
+  return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
 export function buildImageUrl(
   layer,
   { time = null, width = 900, height = 800 } = {},

@@ -1,0 +1,276 @@
+{
+  "source": "https://meteo.gov.lk/",
+  "fetchedAt": "2026-10-26T17:14:11.106598+00:00",
+  "fetchedAtSriLanka": "2026-10-26T22:44:11.106598+05:30",
+  "fetchedAtSriLankaDisplay": "2026-10-26 22:44:11",
+  "timezone": "Asia/Colombo",
+  "meteoLatestObservationUpdatedAt": "2026-10-26 2030",
+  "meteoLatestObservationUpdatedAtSriLanka": "2026-10-26T20:30:00+05:30",
+  "stationCount": 24,
+  "stations": [
+    {
+      "name": "ANURADHAPURA",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "0.3",
+        "totalRainfall": "24.8",
+        "temp": "24.5",
+        "rh": "97",
+        "forecast": "drizzling"
+      }
+    },
+    {
+      "name": "BADULLA",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "1.8",
+        "totalRainfall": "21.5",
+        "temp": "21.4",
+        "rh": "96",
+        "forecast": "showers"
+      }
+    },
+    {
+      "name": "BANDARAWELA",
+      "weather": {
+        "lastUpdated": "2026-10-26 1730",
+        "rainfall": "6.9",
+        "totalRainfall": "18.5",
+        "temp": "19.0",
+        "rh": "100",
+        "forecast": "showers"
+      }
+    },
+    {
+      "name": "BATTICALOA",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "0.0",
+        "totalRainfall": "0.8",
+        "temp": "26.6",
+        "rh": "87",
+        "forecast": "partlycloudynight"
+      }
+    },
+    {
+      "name": "COLOMBO",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "5.7",
+        "totalRainfall": "28.7",
+        "temp": "25.7",
+        "rh": "96",
+        "forecast": "showers"
+      }
+    },
+    {
+      "name": "GALLE",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "0.5",
+        "totalRainfall": "18.4",
+        "temp": "28.7",
+        "rh": "83",
+        "forecast": "thunderstormsnight"
+      }
+    },
+    {
+      "name": "HAMBANTOTA",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "0.2",
+        "totalRainfall": "20.5",
+        "temp": "26.1",
+        "rh": "93",
+        "forecast": "showers"
+      }
+    },
+    {
+      "name": "JAFFNA",
+      "weather": {
+        "lastUpdated": "2026-10-26 1730",
+        "rainfall": "1.0",
+        "totalRainfall": "22.4",
+        "temp": "24.0",
+        "rh": "100",
+        "forecast": "rain"
+      }
+    },
+    {
+      "name": "KATUGASTOTA",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "15.1",
+        "totalRainfall": "45.1",
+        "temp": "22.6",
+        "rh": "98",
+        "forecast": "showers"
+      }
+    },
+    {
+      "name": "KATUNAYAKE",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "2.8",
+        "totalRainfall": "25.6",
+        "temp": "25.1",
+        "rh": "97",
+        "forecast": "fairnight"
+      }
+    },
+    {
+      "name": "KURUNEGALA",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "0.0",
+        "totalRainfall": "23.8",
+        "temp": "24.6",
+        "rh": "95",
+        "forecast": "partlycloudynight"
+      }
+    },
+    {
+      "name": "MAHA ILLUPPALLAMA",
+      "weather": {
+        "lastUpdated": "2026-10-26 1730",
+        "rainfall": "2.8",
+        "totalRainfall": "7.5",
+        "temp": "25.3",
+        "rh": "97",
+        "forecast": "mist"
+      }
+    },
+    {
+      "name": "MANNAR",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "0.9",
+        "totalRainfall": "41.3",
+        "temp": "25.0",
+        "rh": "88",
+        "forecast": "rain"
+      }
+    },
+    {
+      "name": "MATTALA",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "0.4",
+        "totalRainfall": "28.7",
+        "temp": "25.0",
+        "rh": "98",
+        "forecast": "partlycloudynight"
+      }
+    },
+    {
+      "name": "MONARAGALA",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "2.5",
+        "totalRainfall": "15.7",
+        "temp": "23.8",
+        "rh": "96",
+        "forecast": "rain"
+      }
+    },
+    {
+      "name": "MULLATIVU",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "1.8",
+        "totalRainfall": "20.4",
+        "temp": "24.5",
+        "rh": "94",
+        "forecast": "showers"
+      }
+    },
+    {
+      "name": "NUWARA ELIYA",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "3.3",
+        "totalRainfall": "49.1",
+        "temp": "16.1",
+        "rh": "93",
+        "forecast": "rain"
+      }
+    },
+    {
+      "name": "POLONNARUWA",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "1.4",
+        "totalRainfall": "5.9",
+        "temp": "25.0",
+        "rh": "92",
+        "forecast": "drizzling"
+      }
+    },
+    {
+      "name": "POTTUVIL",
+      "weather": {
+        "lastUpdated": "2026-10-26 1730",
+        "rainfall": "Trace",
+        "totalRainfall": "0.1",
+        "temp": "28.2",
+        "rh": "83",
+        "forecast": "partlycloudy"
+      }
+    },
+    {
+      "name": "PUTTALAM",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "1.2",
+        "totalRainfall": "2.3",
+        "temp": "25.7",
+        "rh": "94",
+        "forecast": "showers"
+      }
+    },
+    {
+      "name": "RATMALANA",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "3.7",
+        "totalRainfall": "28.3",
+        "temp": "25.5",
+        "rh": "97",
+        "forecast": "showers"
+      }
+    },
+    {
+      "name": "RATNAPURA",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "0.5",
+        "totalRainfall": "55.0",
+        "temp": "24.2",
+        "rh": "100",
+        "forecast": "drizzling"
+      }
+    },
+    {
+      "name": "TRINCOMALEE",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "0.2",
+        "totalRainfall": "1.8",
+        "temp": "23.8",
+        "rh": "96",
+        "forecast": "drizzling"
+      }
+    },
+    {
+      "name": "VAVUNIYA",
+      "weather": {
+        "lastUpdated": "2026-10-26 2030",
+        "rainfall": "2.0",
+        "totalRainfall": "20.5",
+        "temp": "23.6",
+        "rh": "95",
+        "forecast": "showers"
+      }
+    }
+  ]
+}

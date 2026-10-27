@@ -150,7 +150,11 @@ export function localDateKey(timestamp, timeZone) {
 export function relativeElapsedLabel(timestamp, now = Date.now()) {
   const date = toDate(timestamp);
   if (!date || !Number.isFinite(now) || now <= 0) return null;
-  const elapsed = Math.max(0, now - date.getTime());
+  const elapsed = now - date.getTime();
+  // A timestamp ahead of the device clock must not read as "just now": that is
+  // how a broken source clock hides stale data. Tolerate a little skew, then
+  // report the problem plainly.
+  if (elapsed < -60_000) return "in the future";
   if (elapsed < 45_000) return "just now";
   const minutes = Math.floor(elapsed / 60_000);
   if (minutes < 60) return `${minutes} min ago`;

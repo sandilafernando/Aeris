@@ -259,8 +259,11 @@ export function buildWeatherUrl(location) {
 export function buildOutlook(hourly, current) {
   const group = current?.condition?.group;
   const noun = group === "snow" ? "Snow" : group === "storm" ? "Storms" : "Rain";
+  const precipitation = current?.precipitation;
 
-  if ((current?.precipitation ?? 0) > 0) {
+  // Only claim that it is raining when the feed actually reported rain. A
+  // missing precipitation field is unknown, not dry.
+  if (Number.isFinite(precipitation) && precipitation > 0) {
     if (group === "snow") return "Snow is falling now.";
     if (group === "storm") return "Storms are nearby now.";
     return "Rain is falling now.";
@@ -279,6 +282,10 @@ export function buildOutlook(hourly, current) {
     return `${noun} possible within 6 hours.`;
   }
   if (group === "fog") return "Low visibility may persist.";
+  // No precipitation probability for the next six hours means the forecast
+  // cannot support either a dry or a wet claim.
+  if (maxProbability === null) return "Precipitation is unavailable for the next 6 hours.";
+  if (!Number.isFinite(precipitation)) return "Current precipitation is unavailable.";
   return "Mostly dry over the next 6 hours.";
 }
 

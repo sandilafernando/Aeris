@@ -1,5 +1,10 @@
 export const AUTOMATIC_STATION_ID = "auto";
-export const DEFAULT_OBSERVATION_STALE_MINUTES = 6 * 60;
+// The Department of Meteorology publishes a 3-hourly cycle, but the product
+// rule for using a reading as the current station observation is five hours.
+export const DEFAULT_OBSERVATION_STALE_MINUTES = 5 * 60;
+// A small clock skew is tolerated. A timestamp further ahead than this is not
+// treated as fresh, because doing so would let a bad clock hide stale data.
+export const FUTURE_OBSERVATION_TOLERANCE_MINUTES = 10;
 
 const EARTH_RADIUS_KM = 6_371;
 
@@ -53,7 +58,20 @@ export function stationDistanceKm(station, location) {
 export function observationAgeMinutes(station, now) {
   if (!Number.isFinite(station?.observationEpochMs)) return null;
   if (!Number.isFinite(now) || now <= 0) return null;
-  return Math.max(0, (now - station.observationEpochMs) / 60_000);
+  // Keep negative ages. A future observation must be distinguishable from a
+  // reading that is genuinely zero minutes old.
+  return (now - station.observationEpochMs) / 60_000;
+}
+
+export function isFreshObservationAge(
+  ageMinutes,
+  staleAfterMinutes = DEFAULT_OBSERVATION_STALE_MINUTES,
+  futureToleranceMinutes = FUTURE_OBSERVATION_TOLERANCE_MINUTES,
+) {
+  if (!Number.isFinite(ageMinutes)) return false;
+  if (ageMinutes > staleAfterMinutes) return false;
+  if (ageMinutes < -futureToleranceMinutes) return false;
+  return true;
 }
 
 export function isUsableObservation(station) {
@@ -67,7 +85,7 @@ export function isObservationStale(
   staleAfterMinutes = DEFAULT_OBSERVATION_STALE_MINUTES,
 ) {
   const age = observationAgeMinutes(station, now);
-  return age == null || age > staleAfterMinutes;
+  return !isFreshObservationAge(age, staleAfterMinutes);
 }
 
 function automaticSelection(stations, { location, now, staleAfterMinutes }) {
@@ -112,8 +130,7 @@ function automaticSelection(stations, { location, now, staleAfterMinutes }) {
   const fresh = ranked.filter(
     (entry) =>
       entry.usable &&
-      entry.ageMinutes != null &&
-      entry.ageMinutes <= staleAfterMinutes,
+      isFreshObservationAge(entry.ageMinutes, staleAfterMinutes),
   );
   const nearest = ranked[0];
   const nearestFresh = fresh[0];
@@ -217,8 +234,7 @@ export function selectOfficialStation(
       distanceKm: stationDistanceKm(station, location),
       ageMinutes,
       stale:
-        ageMinutes == null ||
-        ageMinutes > staleAfterMinutes ||
+        !isFreshObservationAge(ageMinutes, staleAfterMinutes) ||
         !isUsableObservation(station),
       manualMissing: false,
       alternatives: [],

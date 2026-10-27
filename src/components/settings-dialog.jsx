@@ -5,7 +5,9 @@ import {
   Bell,
   BellOff,
   Database,
+  Download,
   ExternalLink,
+  LayoutGrid,
   LoaderCircle,
   MapPin,
   Monitor,
@@ -26,7 +28,18 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { SegmentedControl } from "@/components/segmented-control";
 import StationSelect from "@/components/station-select";
+import { InstallHint } from "@/components/pwa-manager";
 import { usePreferences } from "@/components/preferences-provider";
+import { useOnlineStatus } from "@/hooks/use-environment";
+import { useInstallPrompt } from "@/hooks/use-install-prompt";
+import { useMeteoJson } from "@/hooks/use-official-source";
+import {
+  GLANCE_METRIC_IDS,
+  GLANCE_METRIC_LABELS,
+  MAX_GLANCE_METRICS,
+  normalizeGlanceMetrics,
+  normalizeGlanceSource,
+} from "@/lib/glance";
 import { AUTOMATIC_STATION_ID } from "@/lib/station-selection";
 
 const THEME_OPTIONS = [
@@ -46,12 +59,17 @@ const WIND_OPTIONS = [
   { value: "ms", label: "m/s" },
 ];
 
+const GLANCE_SOURCE_OPTIONS = [
+  { value: "dom", label: "DoM" },
+  { value: "metar", label: "Airports" },
+  { value: "combined", label: "Both" },
+];
+
 export default function SettingsDialog({
   open,
   onOpenChange,
   onCloseAutoFocus,
   onOpenSources,
-  official,
 }) {
   const {
     theme,
@@ -60,13 +78,20 @@ export default function SettingsDialog({
     reducedEffects,
     stationId,
     weatherNotifications,
+    glanceSource,
+    glanceMetrics,
     setTheme,
     setTemperatureUnit,
     setWindUnit,
     setReducedEffects,
     setStationId,
     setWeatherNotifications,
+    setGlanceSource,
+    setGlanceMetrics,
   } = usePreferences();
+  const online = useOnlineStatus();
+  const install = useInstallPrompt();
+  const dom = useMeteoJson({ enabled: open, online });
   const [notificationPermission, setNotificationPermission] = useState("unknown");
 
   /* eslint-disable react-hooks/set-state-in-effect -- Notification.permission only exists in the browser and must be read after hydration. */
@@ -116,22 +141,25 @@ export default function SettingsDialog({
     }
   };
 
-  const stations = official?.data?.stations || [];
-  const stationSource = official?.data?.source || null;
-  const usingMetar =
-    stationSource?.id === "sri-lanka-metar" ||
-    stationSource?.kind === "official-aviation-observations";
-  const stationLabel = usingMetar ? "NOAA AWC airport station" : "Sri Lanka DoM station";
-  const stationReference = usingMetar
-    ? "These are official airport station coordinates published by NOAA AWC, not Department of Meteorology district stations."
-    : "Automatic selection uses approximate city-centre reference points, not official station coordinates, because the Department's published feeds do not include coordinates.";
-  const stationLoading = official?.status === "loading" && !official?.data;
-  const stationError = official?.status === "error" && !official?.data;
-  const stationStale = official?.status === "stale" && Boolean(official?.data);
+  const stations = dom?.data?.stations || [];
+  const stationLoading = dom?.status === "loading" && !dom?.data;
+  const stationError = dom?.status === "error" && !dom?.data;
+  const stationStale =
+    (dom?.status === "stale" && Boolean(dom?.data)) || dom?.data?.status === "stale";
   const manualMissing =
     stationId !== AUTOMATIC_STATION_ID &&
     stations.length > 0 &&
     !stations.some((station) => station.id === stationId);
+
+  const metrics = normalizeGlanceMetrics(glanceMetrics);
+  const toggleMetric = (metric) => {
+    const selected = metrics.includes(metric);
+    if (selected && metrics.length === 1) return;
+    if (!selected && metrics.length >= MAX_GLANCE_METRICS) return;
+    setGlanceMetrics(
+      selected ? metrics.filter((entry) => entry !== metric) : [...metrics, metric],
+    );
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -174,6 +202,46 @@ export default function SettingsDialog({
             />
           </section>
 
+          {install.ready && install.isStandalone ? (
+            <section aria-labelledby="install-heading">
+              <h2
+                id="install-heading"
+                className="mb-2.5 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground"
+              >
+                Installed app
+              </h2>
+              <div className="flex items-start gap-3 rounded-2xl border border-outline-variant bg-surface-container/55 p-3.5">
+                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary-container text-on-primary-container">
+                  <Download aria-hidden="true" className="size-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold leading-5">
+                    Aeris is installed on this device
+                  </p>
+                  <p className="mt-0.5 text-[0.7rem] leading-5 text-muted-foreground">
+                    You are using the standalone app window. Install prompts are hidden because
+                    the app is already on this device.
+                  </p>
+                </div>
+              </div>
+            </section>
+          ) : install.ready && (install.canInstall || install.isIos) ? (
+            <section aria-labelledby="install-heading">
+              <h2
+                id="install-heading"
+                className="mb-2.5 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground"
+              >
+                Install Aeris
+              </h2>
+              <InstallHint />
+              <p className="mt-2 px-1 text-[0.66rem] leading-4 text-muted-foreground">
+                Installing adds a home-screen icon and a full-screen window. Aeris still keeps
+                every preference and saved place in this browser, and nothing is uploaded to an
+                account.
+              </p>
+            </section>
+          ) : null}
+
           <section aria-labelledby="units-heading">
             <h2
               id="units-heading"
@@ -214,6 +282,77 @@ export default function SettingsDialog({
             </div>
           </section>
 
+          <section aria-labelledby="glance-heading">
+            <h2
+              id="glance-heading"
+              className="mb-2.5 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground"
+            >
+              At a glance
+            </h2>
+            <div className="space-y-4 rounded-2xl border border-outline-variant bg-surface-container/55 p-3.5">
+              <div>
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                  <LayoutGrid aria-hidden="true" className="size-4 text-muted-foreground" />
+                  Observation source
+                </div>
+                <SegmentedControl
+                  label="At a glance observation source"
+                  name="settings-glance-source"
+                  options={GLANCE_SOURCE_OPTIONS}
+                  value={normalizeGlanceSource(glanceSource)}
+                  onChange={setGlanceSource}
+                />
+                <p className="mt-2 px-1 text-[0.7rem] leading-5 text-muted-foreground">
+                  DoM district stations are the default. A DoM reading older than five hours is
+                  replaced by a labelled airport report. &ldquo;Both&rdquo; keeps the two sources
+                  separate.
+                </p>
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold">Metrics</span>
+                  <span className="text-[0.66rem] font-medium text-muted-foreground">
+                    {metrics.length} of {MAX_GLANCE_METRICS}
+                  </span>
+                </div>
+                <fieldset>
+                  <legend className="sr-only">At a glance metrics</legend>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {GLANCE_METRIC_IDS.map((metric) => {
+                      const selected = metrics.includes(metric);
+                      const atLimit = !selected && metrics.length >= MAX_GLANCE_METRICS;
+                      const lastOne = selected && metrics.length === 1;
+                      return (
+                        <label
+                          key={metric}
+                          className={`flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border px-2.5 text-[0.7rem] font-medium transition-colors ${
+                            selected
+                              ? "border-primary/40 bg-primary-container/60 text-on-primary-container"
+                              : "border-outline-variant/80 bg-card/60 text-muted-foreground hover:text-foreground"
+                          } ${atLimit || lastOne ? "cursor-not-allowed opacity-60" : ""}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            disabled={atLimit || lastOne}
+                            onChange={() => toggleMetric(metric)}
+                            className="size-3.5 accent-[var(--primary)]"
+                          />
+                          <span className="min-w-0 truncate">{GLANCE_METRIC_LABELS[metric]}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+                <p className="mt-2 px-1 text-[0.66rem] leading-4 text-muted-foreground">
+                  A metric appears only where its source publishes it. The DoM snapshot has no
+                  wind, pressure, cloud, or dew point; METAR has no rainfall total.
+                </p>
+              </div>
+            </div>
+          </section>
+
           <section aria-labelledby="station-heading">
             <h2
               id="station-heading"
@@ -224,7 +363,7 @@ export default function SettingsDialog({
             <div className="space-y-3 rounded-2xl border border-outline-variant bg-surface-container/55 p-3.5">
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <MapPin aria-hidden="true" className="size-4 text-muted-foreground" />
-                <label htmlFor="settings-station-select">{stationLabel}</label>
+                <label htmlFor="settings-station-select">Sri Lanka DoM station</label>
               </div>
               <StationSelect
                 id="settings-station-select"
@@ -259,13 +398,13 @@ export default function SettingsDialog({
                   <p className="font-semibold">Station list unavailable</p>
                   <p className="mt-0.5 text-muted-foreground">
                     The official source did not respond.
-                    {official?.retryInSeconds > 0
-                      ? ` Retrying in ${official.retryInSeconds}s.`
+                    {dom?.retryInSeconds > 0
+                      ? ` Retrying in ${dom.retryInSeconds}s.`
                       : ""}
                   </p>
                   <button
                     type="button"
-                    onClick={official?.refresh}
+                    onClick={dom?.refresh}
                     className="mt-1.5 min-h-9 rounded-full px-2.5 text-[0.68rem] font-semibold text-primary hover:bg-primary-container"
                   >
                     Try again
@@ -290,7 +429,9 @@ export default function SettingsDialog({
               ) : null}
 
               <p className="text-[0.66rem] leading-4 text-muted-foreground">
-                {stationReference}
+                Automatic selection uses approximate city-centre reference points, not official
+                station coordinates, because the Department&apos;s published feeds do not include
+                coordinates. The same airport is used when the source switches to METAR.
               </p>
             </div>
           </section>
@@ -427,11 +568,11 @@ export default function SettingsDialog({
                 <Database aria-hidden="true" className="mt-1 size-4 shrink-0 text-primary" />
                 <span>
                   Official station observations come from the Department of Meteorology, Sri
-                  Lanka. Aeris reads the Department&apos;s 3-hourly station workbook first and
-                  its public map page second; both are DoM data. If neither can be reached, Aeris
-                  shows official ICAO airport METAR reports from NOAA AWC and labels them as
-                  airport stations, not DoM district stations. Both paths use Aeris&apos;s own
-                  route handler and are shown separately from the Open-Meteo forecast.
+                  Lanka. At a glance reads the Department&apos;s published station snapshot, and a
+                  same-origin route can also read the 3-hourly workbook and public map page. A DoM
+                  reading older than five hours is labelled delayed, or replaced by a labelled
+                  NOAA AWC airport METAR report. Airport reports are never presented as DoM
+                  district readings, and the two sources are never merged.
                 </span>
               </p>
               {onOpenSources ? (

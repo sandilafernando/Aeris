@@ -78,8 +78,8 @@ test("Sri Lankan station, Weather Desk, and footer reflow from 360px to 1440px",
   await page.goto("/");
 
   await expect(page.getByTestId("weather-dashboard")).toBeVisible();
-  const card = page.getByTestId("official-observations");
-  await expect(card.getByTestId("official-station-name")).toHaveText("COLOMBO");
+  const card = page.getByTestId("at-a-glance");
+  await expect(card.getByTestId("glance-dom-station")).toHaveText("COLOMBO");
 
   for (const width of [360, 390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: width < 768 ? 800 : 950 });
@@ -130,4 +130,53 @@ test("daily cards reflow without clipping at every breakpoint", async ({ page })
       expect(box.right).toBeLessThanOrEqual(width + 1);
     }
   }
+});
+
+test("dialogs fit the viewport, use their designed desktop width, and keep a large close target", async ({
+  page,
+}) => {
+  await seedPlaces(page, [BERLIN]);
+  await mockOpenMeteo(page);
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto("/");
+  await expect(page.getByTestId("weather-dashboard")).toBeVisible();
+
+  await page.getByRole("button", { name: "Preferences" }).click();
+  let dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+
+  const mobile = await dialog.evaluate((node) => {
+    const box = node.getBoundingClientRect();
+    return { width: box.width, height: box.height, top: box.top, bottom: box.bottom };
+  });
+  expect(mobile.width).toBeLessThanOrEqual(360);
+  expect(mobile.height).toBeLessThanOrEqual(800 * 0.9 + 1);
+  expect(mobile.top).toBeGreaterThanOrEqual(0);
+  expect(mobile.bottom).toBeLessThanOrEqual(800);
+
+  const closeBox = await dialog
+    .getByRole("button", { name: "Close" })
+    .evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      return { width: box.width, height: box.height };
+    });
+  expect(closeBox.width).toBeGreaterThanOrEqual(44);
+  expect(closeBox.height).toBeGreaterThanOrEqual(44);
+
+  const selectFont = await dialog
+    .locator("#settings-station-select")
+    .evaluate((node) => Number.parseFloat(getComputedStyle(node).fontSize));
+  expect(selectFont).toBeGreaterThanOrEqual(16);
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+
+  // The shared dialog primitive must not cap the per-dialog width at 24rem.
+  await page.setViewportSize({ width: 1440, height: 950 });
+  await page.getByRole("button", { name: "Preferences" }).click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  const desktopWidth = await dialog.evaluate((node) => node.getBoundingClientRect().width);
+  expect(desktopWidth).toBeGreaterThan(500);
+  await page.keyboard.press("Escape");
 });

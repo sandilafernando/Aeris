@@ -108,8 +108,10 @@ export function InstallHint({ className }) {
         <div className="min-w-0">
           <p className="text-sm font-semibold leading-5">Add Aeris to your Home Screen</p>
           <p className="mt-1 max-w-[42ch] text-xs leading-5 text-muted-foreground">
-            On iPhone or iPad, open the Share menu, then choose{" "}
-            <span className="font-semibold text-foreground">Add to Home Screen</span>.
+            On iPhone or iPad, open Aeris in <span className="font-semibold text-foreground">Safari</span>,
+            tap the Share button, then choose{" "}
+            <span className="font-semibold text-foreground">Add to Home Screen</span>. Other iOS
+            browsers cannot install web apps.
           </p>
         </div>
       </div>

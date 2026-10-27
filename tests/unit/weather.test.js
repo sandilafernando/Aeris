@@ -222,6 +222,8 @@ test("preference storage normalizes invalid values", () => {
     reducedEffects: false,
     stationId: "auto",
     weatherNotifications: false,
+    glanceSource: "dom",
+    glanceMetrics: ["temperature", "humidity", "rainfall"],
   });
   assert.deepEqual(
     normalizePreferences({ theme: "sepia", temperatureUnit: "f", windUnit: "knots" }),
@@ -232,6 +234,8 @@ test("preference storage normalizes invalid values", () => {
       reducedEffects: false,
       stationId: "auto",
       weatherNotifications: false,
+      glanceSource: "dom",
+      glanceMetrics: ["temperature", "humidity", "rainfall"],
     },
   );
   assert.deepEqual(
@@ -242,6 +246,8 @@ test("preference storage normalizes invalid values", () => {
       reducedEffects: true,
       stationId: "colombo",
       weatherNotifications: true,
+      glanceSource: "metar",
+      glanceMetrics: ["wind", "pressure"],
     }),
     {
       theme: "dark",
@@ -250,10 +256,24 @@ test("preference storage normalizes invalid values", () => {
       reducedEffects: true,
       stationId: "colombo",
       weatherNotifications: true,
+      glanceSource: "metar",
+      glanceMetrics: ["wind", "pressure"],
     },
   );
   assert.equal(normalizePreferences({ reducedEffects: "yes" }).reducedEffects, false);
   assert.equal(normalizePreferences({ weatherNotifications: "yes" }).weatherNotifications, false);
+  assert.equal(normalizePreferences({ glanceSource: "satellite" }).glanceSource, "dom");
+  assert.deepEqual(normalizePreferences({ glanceMetrics: [] }).glanceMetrics, [
+    "temperature",
+    "humidity",
+    "rainfall",
+  ]);
+  assert.deepEqual(
+    normalizePreferences({
+      glanceMetrics: ["wind", "wind", "nonsense", "pressure"],
+    }).glanceMetrics,
+    ["wind", "pressure"],
+  );
   assert.equal(normalizeStationPreference("  COLOMBO  "), "colombo");
   assert.equal(normalizeStationPreference("auto"), "auto");
   assert.equal(normalizeStationPreference("bad id!"), "auto");

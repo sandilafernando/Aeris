@@ -13,6 +13,7 @@ test("NASA satellite imagery is labelled, timestamped, and switchable", async ({
 
   await expect(page.getByTestId("weather-dashboard")).toBeVisible();
   const card = page.getByTestId("satellite-card");
+  await card.getByRole("button", { name: "Infrared" }).click();
   await expect(
     card.getByRole("img", { name: /Himawari-9 infrared satellite imagery/i }),
   ).toBeVisible();
@@ -24,7 +25,7 @@ test("NASA satellite imagery is labelled, timestamped, and switchable", async ({
 
   await card.getByRole("button", { name: "True colour" }).click();
   await expect(
-    card.getByRole("img", { name: /VIIRS natural-colour satellite imagery/i }),
+    card.getByRole("img", { name: /VIIRS natural-colour satellite pass/i }),
   ).toBeVisible();
   await expect(card).toContainText("Natural colour");
 });

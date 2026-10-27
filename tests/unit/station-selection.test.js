@@ -69,11 +69,26 @@ test("distance and observation freshness stay separate and honest", () => {
   assert.ok(distance > 95 && distance < 115, `expected ~103 km, received ${distance}`);
 
   assert.equal(observationAgeMinutes(COLOMBO, NOW), 720);
-  assert.equal(observationAgeMinutes({ observationEpochMs: NOW + 60_000 }, NOW), 0);
+  assert.equal(observationAgeMinutes({ observationEpochMs: NOW + 60_000 }, NOW), -1);
   assert.equal(observationAgeMinutes(COLOMBO, 0), null);
   assert.equal(isObservationStale(COLOMBO, NOW), true);
   assert.equal(isObservationStale(KATUNAYAKE, NOW), false);
   assert.equal(isObservationStale(KATUNAYAKE, NOW, 10), true);
+
+  // A future timestamp is not silently treated as fresh. A small clock skew is
+  // tolerated; a larger jump is stale.
+  assert.equal(
+    isObservationStale({ ...KATUNAYAKE, observationEpochMs: NOW + 5 * 60_000 }, NOW),
+    false,
+  );
+  assert.equal(
+    isObservationStale({ ...KATUNAYAKE, observationEpochMs: NOW + 20 * 60_000 }, NOW),
+    true,
+  );
+
+  // The product default is five hours, not six.
+  assert.equal(isObservationStale({ ...KATUNAYAKE, observationEpochMs: NOW - 300 * 60_000 }, NOW), false);
+  assert.equal(isObservationStale({ ...KATUNAYAKE, observationEpochMs: NOW - 301 * 60_000 }, NOW), true);
 
   assert.equal(isUsableObservation(COLOMBO), true);
   assert.equal(isUsableObservation({ ...COLOMBO, temperatureC: null }), true);

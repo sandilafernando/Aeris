@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { buildWeatherUrl, normalizeWeather } from "@/lib/weather";
-import { placeKey } from "@/lib/storage";
+import { placeKey, readLastForecast, saveLastForecast } from "@/lib/storage";
 
 const CACHE_TTL = 10 * 60 * 1000;
 const REQUEST_TIMEOUT = 15_000;
@@ -61,6 +61,7 @@ async function requestWeather(place, { force = false } = {}) {
       const payload = await response.json();
       const data = normalizeWeather(payload, place, Date.now());
       weatherCache.set(key, data);
+      saveLastForecast(key, data);
       return data;
     } catch (error) {
       if (error instanceof WeatherRequestError) throw error;
@@ -122,12 +123,14 @@ export function useWeather(location) {
       })
       .catch((error) => {
         if (cancelled) return;
+        const saved = readLastForecast(key);
         setState((previous) => {
           const hasSameLocation = previous.locationKey === key && Boolean(previous.data);
+          const fallback = hasSameLocation ? previous.data : saved;
           return {
             locationKey: key,
-            status: hasSameLocation ? "success" : "error",
-            data: hasSameLocation ? previous.data : null,
+            status: fallback ? (hasSameLocation ? "success" : "stale") : "error",
+            data: fallback,
             error,
             refreshing: false,
           };

@@ -126,7 +126,7 @@ test("units and theme persist after a reload", async ({ page }) => {
   await expect(page.getByTestId("current-temperature")).toContainText(
     "Current temperature 56 degrees Fahrenheit",
   );
-  await expect(page.getByTestId("atmosphere-card")).toContainText("mph");
+  await expect(page.getByText(/mph wind/)).toBeVisible();
 
   const preferences = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), PREFS_KEY);
   expect(preferences).toMatchObject({

@@ -36,7 +36,7 @@ export default function StationSelect({
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
         aria-describedby={describedBy}
-        className="min-h-11 w-full appearance-none rounded-xl border border-outline-variant bg-card py-2 pl-3 pr-9 text-sm font-semibold text-foreground outline-none transition-colors hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+        className="min-h-11 w-full appearance-none rounded-xl border border-outline-variant bg-card py-2 pl-3 pr-9 text-base font-semibold text-foreground outline-none transition-colors hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm"
       >
         <option value={AUTOMATIC_STATION_ID}>Automatic</option>
         {showPendingManual ? (
