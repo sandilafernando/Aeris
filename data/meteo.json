@@ -1,8 +1,8 @@
 {
   "source": "https://meteo.gov.lk/",
-  "fetchedAt": "2026-10-27T11:17:16.943306+00:00",
-  "fetchedAtSriLanka": "2026-10-27T16:47:16.943306+05:30",
-  "fetchedAtSriLankaDisplay": "2026-10-27 16:47:16",
+  "fetchedAt": "2026-10-27T11:37:32.778455+00:00",
+  "fetchedAtSriLanka": "2026-10-27T17:07:32.778455+05:30",
+  "fetchedAtSriLankaDisplay": "2026-10-27 17:07:32",
   "timezone": "Asia/Colombo",
   "stationCount": 24,
   "meteoLatestObservationUpdatedAt": "2026-10-27 14:30:00",
@@ -113,7 +113,7 @@
         "lastUpdated": "2026-10-27 1430",
         "rainfall": "0.0",
         "totalRainfall": "0.0",
-        "temp": "40",
+        "temp": "30.7",
         "rh": "67",
         "forecast": "fairday"
       }
