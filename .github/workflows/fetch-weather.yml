@@ -2,8 +2,8 @@ name: Fetch Sri Lanka Weather Observations
 
 on:
   schedule:
-    # Check every five minutes, 24 hours a day.
-    - cron: "*/5 * * * *"
+    # Fetch official observations every 15 minutes, all day.
+    - cron: "*/15 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -17,7 +17,7 @@ jobs:
   fetch-weather:
     name: Fetch and publish official weather observations
     runs-on: [self-hosted, linux, x64]
-    timeout-minutes: 4
+    timeout-minutes: 5
 
     steps:
       - name: Checkout latest main
@@ -27,33 +27,25 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Fetch, validate and merge station observations
+      - name: Fetch and refresh official weather JSON
         shell: bash
-        env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
-
           python3 <<'PY'
           import json
           import os
           import sys
           import time
           import urllib.request
-          from datetime import datetime, timedelta
+          from datetime import datetime
           from html.parser import HTMLParser
           from pathlib import Path
           from zoneinfo import ZoneInfo
 
-          URL = "https://meteo.gov.lk/"
+          SOURCE_URL = "https://meteo.gov.lk/"
           OUTPUT = Path("data/meteo.json")
           SL = ZoneInfo("Asia/Colombo")
           UTC = ZoneInfo("UTC")
-
-          # Target publication times in Sri Lanka time.
-          # The site may publish late, so keep checking every five minutes.
-          TARGET_MINUTES = (150, 330, 510, 690, 870, 1050, 1230, 1410)
-          WINDOW_MINUTES = 180
 
           class WeatherParser(HTMLParser):
               def __init__(self):
@@ -79,13 +71,13 @@ jobs:
                   try:
                       weather = json.loads(raw)
                   except (json.JSONDecodeError, TypeError):
-                      print(f"Invalid weather JSON for station: {name}")
+                      print(f"Skipping invalid station JSON: {name}")
                       return
 
                   if not isinstance(weather, dict):
                       return
 
-                  allowed = (
+                  fields = (
                       "lastUpdated",
                       "rainfall",
                       "totalRainfall",
@@ -96,7 +88,7 @@ jobs:
 
                   cleaned = {
                       key: weather[key]
-                      for key in allowed
+                      for key in fields
                       if key in weather and weather[key] is not None
                   }
 
@@ -125,55 +117,16 @@ jobs:
                       pass
 
               try:
-                  dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-                  if dt.tzinfo is None:
-                      dt = dt.replace(tzinfo=SL)
-                  return dt.astimezone(SL)
+                  parsed = datetime.fromisoformat(
+                      value.replace("Z", "+00:00")
+                  )
+
+                  if parsed.tzinfo is None:
+                      parsed = parsed.replace(tzinfo=SL)
+
+                  return parsed.astimezone(SL)
               except ValueError:
                   return None
-
-          def station_map(stations):
-              result = {}
-              for station in stations:
-                  if not isinstance(station, dict):
-                      continue
-
-                  name = str(station.get("name") or "").strip()
-                  weather = station.get("weather")
-
-                  if name and isinstance(weather, dict):
-                      result[name.casefold()] = {
-                          "name": name,
-                          "weather": weather,
-                      }
-
-              return result
-
-          def latest_observation(stations):
-              times = [
-                  parse_time(station["weather"].get("lastUpdated"))
-                  for station in stations
-                  if isinstance(station.get("weather"), dict)
-              ]
-              times = [value for value in times if value is not None]
-              return max(times) if times else None
-
-          def current_target(now):
-              midnight = now.replace(
-                  hour=0, minute=0, second=0, microsecond=0
-              )
-              candidates = []
-
-              for offset in (-1, 0, 1):
-                  day = midnight + timedelta(days=offset)
-                  for minute in TARGET_MINUTES:
-                      target = day + timedelta(minutes=minute)
-                      if target <= now < target + timedelta(
-                          minutes=WINDOW_MINUTES
-                      ):
-                          candidates.append(target)
-
-              return max(candidates) if candidates else None
 
           def load_previous():
               try:
@@ -187,30 +140,58 @@ jobs:
                       return obj
 
               except (OSError, json.JSONDecodeError) as exc:
-                  print(f"Could not load previous JSON: {exc}")
+                  print(f"No usable previous JSON: {exc}")
 
               return None
 
-          now = datetime.now(UTC).astimezone(SL)
-          previous = load_previous()
-          target = current_target(now)
-          manual = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
+          def index_stations(stations):
+              indexed = {}
 
-          print("Sri Lanka time:", now.isoformat())
-          print("Target window:", target.isoformat() if target else "none")
-          print("Manual run:", manual)
-          print("Source:", URL)
+              for station in stations:
+                  if not isinstance(station, dict):
+                      continue
 
-          if target is None and not manual:
-              print("Outside an update window; skipping.")
-              sys.exit(0)
+                  name = str(station.get("name") or "").strip()
+                  weather = station.get("weather")
+
+                  if name and isinstance(weather, dict):
+                      indexed[name.casefold()] = {
+                          "name": name,
+                          "weather": weather,
+                      }
+
+              return indexed
+
+          def latest_time(stations):
+              timestamps = []
+
+              for station in stations:
+                  weather = station.get("weather", {})
+                  parsed = parse_time(weather.get("lastUpdated"))
+
+                  if parsed is not None:
+                      timestamps.append(parsed)
+
+              return max(timestamps) if timestamps else None
+
+          # Capture the fetch time independently of observation time.
+          fetched_utc = datetime.now(UTC)
+          fetched_sl = fetched_utc.astimezone(SL)
+
+          # Use no-cache headers and a unique query parameter to reduce
+          # the chance of receiving a cached homepage response.
+          request_url = (
+              SOURCE_URL
+              + "?_aeris_cache_bust="
+              + str(int(time.time()))
+          )
 
           request = urllib.request.Request(
-              URL,
+              request_url,
               headers={
-                  "User-Agent": "AerisWeatherCollector/1.0",
+                  "User-Agent": "AerisWeatherCollector/2.0",
                   "Accept": "text/html",
-                  "Cache-Control": "no-cache",
+                  "Cache-Control": "no-cache, no-store, max-age=0",
                   "Pragma": "no-cache",
               },
           )
@@ -218,11 +199,18 @@ jobs:
           html = None
           last_error = None
 
-          for attempt in range(1, 3):
+          for attempt in range(1, 4):
               try:
                   with urllib.request.urlopen(
-                      request, timeout=20
+                      request, timeout=25
                   ) as response:
+                      status = getattr(response, "status", 200)
+
+                      if status != 200:
+                          raise RuntimeError(
+                              f"Official site returned HTTP {status}"
+                          )
+
                       html = response.read().decode(
                           "utf-8", errors="replace"
                       )
@@ -234,54 +222,66 @@ jobs:
 
               except Exception as exc:
                   last_error = exc
-                  print(f"Fetch attempt {attempt}/2 failed: {exc}")
+                  print(f"Fetch attempt {attempt}/3 failed: {exc}")
 
-                  if attempt < 2:
-                      time.sleep(3)
+                  if attempt < 3:
+                      time.sleep(attempt * 3)
 
           if html is None:
-              raise RuntimeError(f"Official website fetch failed: {last_error}")
+              raise RuntimeError(
+                  f"Could not retrieve official observations: {last_error}"
+              )
 
           parser = WeatherParser()
           parser.feed(html)
           parser.close()
 
           incoming = {}
+
           for station in parser.stations:
               key = station["name"].strip().casefold()
               incoming[key] = station
 
+          # Never replace valid JSON with an empty or invalid scrape.
           if not incoming:
               raise RuntimeError(
-                  "No valid stations found; previous JSON was preserved."
+                  "No valid station observations found. "
+                  "The existing JSON was left untouched."
               )
 
-          old_stations = station_map(
+          previous = load_previous()
+          old_stations = index_stations(
               previous.get("stations", []) if previous else []
           )
 
-          incoming_list = list(incoming.values())
-          incoming_latest = latest_observation(incoming_list)
+          incoming_latest = latest_time(list(incoming.values()))
 
+          # Require at least one recognizable source observation time.
+          # A successful download alone does not prove the source data
+          # is current.
           if incoming_latest is None:
               raise RuntimeError(
-                  "No parseable source observation timestamps; "
-                  "previous JSON was preserved."
+                  "No recognizable lastUpdated timestamp found. "
+                  "The existing JSON was left untouched."
               )
 
-          print("Stations received:", len(incoming))
+          print("Official source:", SOURCE_URL)
+          print("Fetch time (Sri Lanka):", fetched_sl.isoformat())
+          print("Incoming stations:", len(incoming))
           print("Latest source observation:", incoming_latest.isoformat())
 
+          # Merge station-by-station. Do not discard good readings just
+          # because the source omits a station or serves an older reading.
           merged = dict(old_stations)
-          changed_stations = []
-          rejected_older = 0
+          accepted = 0
+          preserved_older = 0
 
           for key, new_station in incoming.items():
               old_station = old_stations.get(key)
 
               if old_station is None:
                   merged[key] = new_station
-                  changed_stations.append(new_station["name"])
+                  accepted += 1
                   continue
 
               old_weather = old_station["weather"]
@@ -290,45 +290,35 @@ jobs:
               old_time = parse_time(old_weather.get("lastUpdated"))
               new_time = parse_time(new_weather.get("lastUpdated"))
 
-              # Never replace a known, timestamped reading with an older
-              # reading. Keep the prior record for this station.
-              if old_time and (new_time is None or new_time < old_time):
-                  rejected_older += 1
+              if old_time is not None and (
+                  new_time is None or new_time < old_time
+              ):
+                  preserved_older += 1
                   continue
 
-              # Same timestamp is allowed: other fields, such as rainfall,
-              # may have changed. Compare the complete station payload.
+              # Same-time readings may contain updated rainfall or
+              # other values, so accept them when the payload changes.
               if new_weather != old_weather:
                   merged[key] = new_station
-                  changed_stations.append(new_station["name"])
-
-          if rejected_older:
-              print("Older station readings preserved:", rejected_older)
+                  accepted += 1
 
           stations = sorted(
               merged.values(),
               key=lambda station: station["name"].casefold()
           )
 
-          latest = latest_observation(stations)
+          if not stations:
+              raise RuntimeError("Merged station list is empty.")
+
+          latest = latest_time(stations)
 
           if latest is None:
               raise RuntimeError(
-                  "Merged data has no valid observation timestamp."
+                  "Merged data has no valid source observation timestamp."
               )
 
-          # Do not rewrite fetchedAt on every five-minute check.
-          # A commit should represent a meaningful station-data change.
-          if previous and not changed_stations:
-              print("No station data changed. Existing JSON preserved.")
-              print("The next scheduled check will retry in five minutes.")
-              sys.exit(0)
-
-          fetched_utc = datetime.now(UTC)
-          fetched_sl = fetched_utc.astimezone(SL)
-
           result = {
-              "source": URL,
+              "source": SOURCE_URL,
               "fetchedAt": fetched_utc.isoformat(),
               "fetchedAtSriLanka": fetched_sl.isoformat(),
               "fetchedAtSriLankaDisplay": fetched_sl.strftime(
@@ -344,44 +334,54 @@ jobs:
           }
 
           OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-          temp = OUTPUT.with_suffix(".json.tmp")
+          temporary = OUTPUT.with_suffix(".json.tmp")
 
           try:
-              with temp.open("w", encoding="utf-8") as file:
-                  json.dump(result, file, ensure_ascii=False, indent=2)
+              with temporary.open("w", encoding="utf-8") as file:
+                  json.dump(
+                      result,
+                      file,
+                      ensure_ascii=False,
+                      indent=2,
+                  )
                   file.write("\n")
 
-              with temp.open("r", encoding="utf-8") as file:
+              # Validate before replacing the existing JSON.
+              with temporary.open("r", encoding="utf-8") as file:
                   checked = json.load(file)
 
               if not isinstance(checked.get("stations"), list):
-                  raise RuntimeError("Invalid stations array")
+                  raise RuntimeError("Invalid JSON stations field.")
 
               if not checked["stations"]:
-                  raise RuntimeError("Saved JSON would contain no stations")
+                  raise RuntimeError("JSON validation found no stations.")
 
               if checked.get("stationCount") != len(checked["stations"]):
-                  raise RuntimeError("Station count validation failed")
+                  raise RuntimeError("Station count validation failed.")
+
+              if not checked.get("fetchedAt"):
+                  raise RuntimeError("Missing fetch timestamp.")
 
               if not checked.get("meteoLatestObservationUpdatedAtSriLanka"):
-                  raise RuntimeError("Missing latest observation timestamp")
+                  raise RuntimeError("Missing observation timestamp.")
 
-              # Atomic replacement: the previous JSON remains intact if
-              # fetching or validation fails.
-              os.replace(temp, OUTPUT)
+              # Replace atomically after successful validation.
+              os.replace(temporary, OUTPUT)
 
           finally:
-              if temp.exists():
-                  temp.unlink()
+              if temporary.exists():
+                  temporary.unlink()
 
-          print("JSON updated:", OUTPUT)
-          print("Changed stations:", ", ".join(changed_stations))
-          print("Total stations retained:", len(stations))
-          print("Fetch time Sri Lanka:", result["fetchedAtSriLankaDisplay"])
-          print("Latest observation:", latest.isoformat())
+          print("JSON refreshed successfully:", OUTPUT)
+          print("Station count:", len(stations))
+          print("New/changed stations accepted:", accepted)
+          print("Older station readings preserved:", preserved_older)
+          print("Fetch time:", result["fetchedAtSriLankaDisplay"])
+          print("Latest source observation:", latest.isoformat())
+          print("The JSON is refreshed even when observations are unchanged.")
           PY
 
-      - name: Commit and push updated JSON
+      - name: Commit and push refreshed JSON
         shell: bash
         run: |
           set -euo pipefail
@@ -392,16 +392,18 @@ jobs:
 
           git add data/meteo.json
 
+          # fetchedAt changes after every successful fetch, so this
+          # normally produces a commit every 15 minutes.
           if git diff --cached --quiet; then
-            echo "No JSON changes to commit."
+            echo "JSON is identical; no commit needed."
             exit 0
           fi
 
-          git commit -m "Update official Sri Lanka weather observations"
+          git commit -m "Refresh official Sri Lanka weather data"
 
           for attempt in 1 2 3; do
             if git push origin HEAD:main; then
-              echo "Updated data/meteo.json pushed to main."
+              echo "SUCCESS: refreshed JSON pushed to main."
               exit 0
             fi
 
@@ -414,9 +416,9 @@ jobs:
             fi
 
             if [ "$attempt" -lt 3 ]; then
-              sleep 2
+              sleep 3
             fi
           done
 
-          echo "Unable to push weather update after three attempts." >&2
+          echo "ERROR: unable to push refreshed JSON." >&2
           exit 1
