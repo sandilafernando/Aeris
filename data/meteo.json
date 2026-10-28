@@ -1,21 +1,21 @@
 {
   "source": "https://meteo.gov.lk/",
-  "fetchedAt": "2026-10-28T19:31:54.200121+00:00",
-  "fetchedAtSriLanka": "2026-10-29T01:01:54.200121+05:30",
-  "fetchedAtSriLankaDisplay": "2026-10-29 01:01:54",
+  "fetchedAt": "2026-10-28T23:30:49.330871+00:00",
+  "fetchedAtSriLanka": "2026-10-29T05:00:49.330871+05:30",
+  "fetchedAtSriLankaDisplay": "2026-10-29 05:00:49",
   "timezone": "Asia/Colombo",
   "stationCount": 24,
-  "meteoLatestObservationUpdatedAt": "2026-10-28 23:30:00",
-  "meteoLatestObservationUpdatedAtSriLanka": "2026-10-28T23:30:00+05:30",
+  "meteoLatestObservationUpdatedAt": "2026-10-29 02:30:00",
+  "meteoLatestObservationUpdatedAtSriLanka": "2026-10-29T02:30:00+05:30",
   "stations": [
     {
       "name": "ANURADHAPURA",
       "weather": {
-        "lastUpdated": "2026-10-28 2330",
+        "lastUpdated": "2026-10-29 0230",
         "rainfall": "0.0",
         "totalRainfall": "0.0",
-        "temp": "26.2",
-        "rh": "92",
+        "temp": "25.7",
+        "rh": "94",
         "forecast": "partlycloudynight"
       }
     },
@@ -44,45 +44,45 @@
     {
       "name": "BATTICALOA",
       "weather": {
-        "lastUpdated": "2026-10-28 2330",
+        "lastUpdated": "2026-10-29 0230",
         "rainfall": "0.0",
         "totalRainfall": "26.7",
-        "temp": "26.4",
-        "rh": "97",
+        "temp": "26.2",
+        "rh": "96",
         "forecast": "partlycloudynight"
       }
     },
     {
       "name": "COLOMBO",
       "weather": {
-        "lastUpdated": "2026-10-28 2330",
+        "lastUpdated": "2026-10-29 0230",
         "rainfall": "0.0",
         "totalRainfall": "8.7",
-        "temp": "25.9",
+        "temp": "26.1",
         "rh": "93",
-        "forecast": "partlycloudynight"
+        "forecast": "thunderstormsnight"
       }
     },
     {
       "name": "GALLE",
       "weather": {
-        "lastUpdated": "2026-10-28 2330",
-        "rainfall": "0.8",
+        "lastUpdated": "2026-10-29 0230",
+        "rainfall": "0.0",
         "totalRainfall": "8.8",
-        "temp": "28.1",
-        "rh": "90",
-        "forecast": "showers"
+        "temp": "28.2",
+        "rh": "86",
+        "forecast": "cloudy"
       }
     },
     {
       "name": "HAMBANTOTA",
       "weather": {
-        "lastUpdated": "2026-10-28 2330",
-        "rainfall": "0.0",
-        "totalRainfall": "0.4",
-        "temp": "26.4",
-        "rh": "93",
-        "forecast": "thunderstormsnight"
+        "lastUpdated": "2026-10-29 0230",
+        "rainfall": "0.2",
+        "totalRainfall": "0.6",
+        "temp": "25.6",
+        "rh": "95",
+        "forecast": "hazenight"
       }
     },
     {
@@ -99,33 +99,33 @@
     {
       "name": "KATUGASTOTA",
       "weather": {
-        "lastUpdated": "2026-10-28 2330",
-        "rainfall": "0.1",
+        "lastUpdated": "2026-10-29 0230",
+        "rainfall": "0.0",
         "totalRainfall": "0.2",
-        "temp": "22.6",
-        "rh": "96",
-        "forecast": "partlycloudynight"
+        "temp": "21.8",
+        "rh": "95",
+        "forecast": "cloudy"
       }
     },
     {
       "name": "KATUNAYAKE",
       "weather": {
-        "lastUpdated": "2026-10-28 2330",
-        "rainfall": "0.0",
-        "totalRainfall": "1.5",
-        "temp": "25.8",
-        "rh": "97",
-        "forecast": "mist"
+        "lastUpdated": "2026-10-29 0230",
+        "rainfall": "5.1",
+        "totalRainfall": "6.6",
+        "temp": "26.2",
+        "rh": "96",
+        "forecast": "thunderstormsnight"
       }
     },
     {
       "name": "KURUNEGALA",
       "weather": {
-        "lastUpdated": "2026-10-28 2330",
+        "lastUpdated": "2026-10-29 0230",
         "rainfall": "0.0",
         "totalRainfall": "12.6",
-        "temp": "26.0",
-        "rh": "87",
+        "temp": "25.7",
+        "rh": "88",
         "forecast": "cloudy"
       }
     },
@@ -143,23 +143,23 @@
     {
       "name": "MANNAR",
       "weather": {
-        "lastUpdated": "2026-10-28 2330",
+        "lastUpdated": "2026-10-29 0230",
         "rainfall": "0.0",
         "totalRainfall": "0.0",
-        "temp": "28.2",
-        "rh": "89",
-        "forecast": "fairnight"
+        "temp": "28.6",
+        "rh": "80",
+        "forecast": "partlycloudynight"
       }
     },
     {
       "name": "MATTALA",
       "weather": {
-        "lastUpdated": "2026-10-28 2330",
+        "lastUpdated": "2026-10-29 0230",
         "rainfall": "0.0",
         "totalRainfall": "45.4",
         "temp": "25.0",
-        "rh": "95",
-        "forecast": "partlycloudynight"
+        "rh": "98",
+        "forecast": "fairnight"
       }
     },
     {
@@ -187,10 +187,10 @@
     {
       "name": "NUWARA ELIYA",
       "weather": {
-        "lastUpdated": "2026-10-28 2330",
+        "lastUpdated": "2026-10-29 0230",
         "rainfall": "0.0",
         "totalRainfall": "1.0",
-        "temp": "15.0",
+        "temp": "14.6",
         "rh": "90",
         "forecast": "partlycloudynight"
       }
@@ -220,45 +220,45 @@
     {
       "name": "PUTTALAM",
       "weather": {
-        "lastUpdated": "2026-10-28 2330",
+        "lastUpdated": "2026-10-29 0230",
         "rainfall": "0.0",
         "totalRainfall": "3.9",
-        "temp": "26.4",
-        "rh": "93",
+        "temp": "26.0",
+        "rh": "92",
         "forecast": "hazenight"
       }
     },
     {
       "name": "RATMALANA",
       "weather": {
-        "lastUpdated": "2026-10-28 2330",
+        "lastUpdated": "2026-10-29 0230",
         "rainfall": "0.0",
         "totalRainfall": "6.7",
-        "temp": "26.0",
-        "rh": "92",
-        "forecast": "cloudy"
+        "temp": "25.8",
+        "rh": "95",
+        "forecast": "thunderstormsnight"
       }
     },
     {
       "name": "RATNAPURA",
       "weather": {
-        "lastUpdated": "2026-10-28 2330",
-        "rainfall": "0.0",
-        "totalRainfall": "13.7",
-        "temp": "24.3",
-        "rh": "97",
-        "forecast": "mist"
+        "lastUpdated": "2026-10-29 0230",
+        "rainfall": "0.3",
+        "totalRainfall": "14.0",
+        "temp": "24.2",
+        "rh": "100",
+        "forecast": "drizzling"
       }
     },
     {
       "name": "TRINCOMALEE",
       "weather": {
-        "lastUpdated": "2026-10-28 2330",
+        "lastUpdated": "2026-10-29 0230",
         "rainfall": "0.0",
         "totalRainfall": "0.0",
-        "temp": "26.2",
-        "rh": "85",
-        "forecast": "partlycloudynight"
+        "temp": "25.5",
+        "rh": "89",
+        "forecast": "cloudy"
       }
     },
     {
