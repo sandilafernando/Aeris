@@ -1,8 +1,8 @@
 {
   "source": "https://meteo.gov.lk/",
-  "fetchedAt": "2026-10-29T08:25:02.855430+00:00",
-  "fetchedAtSriLanka": "2026-10-29T13:55:02.855430+05:30",
-  "fetchedAtSriLankaDisplay": "2026-10-29 13:55:02",
+  "fetchedAt": "2026-10-29T08:25:29.634912+00:00",
+  "fetchedAtSriLanka": "2026-10-29T13:55:29.634912+05:30",
+  "fetchedAtSriLankaDisplay": "2026-10-29 13:55:29",
   "timezone": "Asia/Colombo",
   "stationCount": 24,
   "meteoLatestObservationUpdatedAt": "2026-10-29 11:30:00",
